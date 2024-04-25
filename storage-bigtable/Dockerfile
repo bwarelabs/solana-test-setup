@@ -2,6 +2,9 @@ FROM google/cloud-sdk:latest
 
 WORKDIR /usr/workspace/
 
+RUN apt-get update && \
+    apt-get install -y netcat
+
 RUN git clone "https://github.com/bwarelabs/agave.git"
 
 RUN chmod +x /usr/workspace/agave/storage-bigtable/init-bigtable.sh

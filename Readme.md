@@ -19,7 +19,7 @@ The setup is ideal for development and testing of Solana applications that requi
 First, clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/your-username/solana-bigtable-integration.git
+git clone https://github.com/bwarelabs/solana-bigtable-integration.git
 cd solana-bigtable-integration
 ```
 
