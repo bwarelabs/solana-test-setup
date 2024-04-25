@@ -2,7 +2,7 @@ FROM google/cloud-sdk:latest
 
 WORKDIR /usr/workspace/
 
-RUN git clone "https://github.com/bwarelabs/solana.git" -b "SOL-12-Implement-a-test-setup-for-the-project"
+RUN git clone "https://github.com/bwarelabs/solana.git"
 
 RUN chmod +x /usr/workspace/solana/storage-bigtable/init-bigtable.sh
 

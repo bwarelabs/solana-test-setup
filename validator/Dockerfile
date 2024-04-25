@@ -7,7 +7,7 @@ RUN apt-get update && \
 
 WORKDIR /usr/workspace/
 
-RUN git clone "https://github.com/bwarelabs/solana.git" -b "SOL-12-Implement-a-test-setup-for-the-project"
+RUN git clone "https://github.com/bwarelabs/solana.git"
 
 WORKDIR /usr/workspace/solana/validator
 
