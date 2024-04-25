@@ -1,0 +1,26 @@
+services:
+  bigtable-emulator:
+    build:
+      context: ./storage-bigtable
+    ports:
+      - "8086:8086"
+    environment:
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+    command: bash -c "sleep 1 &&/usr/local/bin/init-bigtable.sh"
+    networks:
+      - app-network
+
+  solana-test-validator:
+    build:
+      dockerfile: validator/Dockerfile
+    environment:
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+    depends_on:
+      - bigtable-emulator
+    networks:
+      - app-network
+
+networks:
+  app-network:
