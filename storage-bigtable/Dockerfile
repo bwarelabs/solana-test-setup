@@ -2,9 +2,12 @@ FROM google/cloud-sdk:latest
 
 WORKDIR /usr/workspace/
 
-RUN git clone "https://github.com/bwarelabs/solana.git" -b "SOL-12-Implement-a-test-setup-for-the-project"
+RUN apt-get update && \
+    apt-get install -y netcat
 
-RUN chmod +x /usr/workspace/solana/storage-bigtable/init-bigtable.sh
+RUN git clone "https://github.com/bwarelabs/agave.git"
+
+RUN chmod +x /usr/workspace/agave/storage-bigtable/init-bigtable.sh
 
 COPY solana-data-migration-1b9caa70b7cc.json /usr/local/bin/solana-data-migration-1b9caa70b7cc.json
 COPY start-bigtable.sh /usr/local/bin/start-bigtable.sh

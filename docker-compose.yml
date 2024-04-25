@@ -7,7 +7,6 @@ services:
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
-    command: bash -c "sleep 1 &&/usr/local/bin/init-bigtable.sh"
     networks:
       - app-network
 
