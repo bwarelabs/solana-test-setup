@@ -2,9 +2,9 @@ FROM google/cloud-sdk:latest
 
 WORKDIR /usr/workspace/
 
-RUN git clone "https://github.com/bwarelabs/solana.git"
+RUN git clone "https://github.com/bwarelabs/agave.git"
 
-RUN chmod +x /usr/workspace/solana/storage-bigtable/init-bigtable.sh
+RUN chmod +x /usr/workspace/agave/storage-bigtable/init-bigtable.sh
 
 COPY solana-data-migration-1b9caa70b7cc.json /usr/local/bin/solana-data-migration-1b9caa70b7cc.json
 COPY start-bigtable.sh /usr/local/bin/start-bigtable.sh
