@@ -1,16 +1,14 @@
 services:
   bigtable-emulator:
     build:
-      context: ./storage-bigtable
+      context: ./bigtable-emulator
     ports:
       - "8086:8086"
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
-    networks:
-      - app-network
 
-  solana-test-validator:
+  validator:
     build:
       dockerfile: validator/Dockerfile
     environment:
@@ -18,8 +16,31 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
     depends_on:
       - bigtable-emulator
-    networks:
-      - app-network
 
-networks:
-  app-network:
+  # hbase:
+  #   build:
+  #     dockerfile: hbase/Dockerfile
+  #   ports:
+  #     - "16010:16010"
+  #     - "16020:16020"
+  #     - "16030:16030"
+  #     - "2181:2181"
+  #   volumes:
+  #     - ./data:/data
+  #   command: ["/bin/bash", "-c", "start-hbase.sh; hbase shell", wait]
+  #   networks:
+  #     - app-network
+
+  pipeline:
+    build:
+      dockerfile: Dockerfile
+      context: ./pipeline
+    environment:
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      # GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./output:/output
+    depends_on:
+      - bigtable-emulator
