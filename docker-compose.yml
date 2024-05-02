@@ -31,13 +31,27 @@ services:
   #   networks:
   #     - app-network
 
-  pipeline:
+  #pipeline:
+  #  build:
+  #    dockerfile: Dockerfile
+  #    context: ./pipeline
+  #  environment:
+  #    BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+  #    # GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+  #  ports:
+  #    - "9090:9090"
+  #  volumes:
+  #    - ./output:/output
+  #  depends_on:
+  #    - bigtable-emulator
+  
+  syncer:
     build:
       dockerfile: Dockerfile
-      context: ./pipeline
+      context: ./syncer
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
-      # GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+    command: sleep 3600
     ports:
       - "9090:9090"
     volumes:
