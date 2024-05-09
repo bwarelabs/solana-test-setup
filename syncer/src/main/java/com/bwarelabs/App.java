@@ -9,8 +9,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.serializer.WritableSerialization;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.hbase.TableName;
@@ -28,12 +26,6 @@ import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
 import org.apache.beam.sdk.testing.SourceTestUtils;
 import org.apache.beam.sdk.values.KV;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-
-import java.io.File;
 
 import org.apache.hadoop.io.SequenceFile.Writer;
 
