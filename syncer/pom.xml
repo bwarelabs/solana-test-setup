@@ -2,11 +2,14 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 <modelVersion>4.0.0</modelVersion>
 <groupId>com.bwarelabs</groupId>
+
 <artifactId>syncer</artifactId>
 <packaging>jar</packaging>
 <version>1.0-SNAPSHOT</version>
 <name>syncer</name>
 <url>http://maven.apache.org</url>
+
+
 
 <properties>
   <!-- https://maven.apache.org/general.html#encoding-warning -->
@@ -58,12 +61,68 @@
     <artifactId>hadoop-hdfs</artifactId>
     <version>3.3.1</version> <!-- Specify the version explicitly if not covered by BOM -->
   </dependency>
-<!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
-<dependency>
+  <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
+  <dependency>
     <groupId>com.google.protobuf</groupId>
     <artifactId>protobuf-java</artifactId>
     <version>3.25.3</version>
-</dependency>
+  </dependency>
+  <dependency>
+    <groupId>org.apache.beam</groupId>
+    <artifactId>beam-sdks-java-core</artifactId>
+    <version>2.33.0</version>
+  </dependency>
+   <dependency>
+      <groupId>org.apache.beam</groupId>
+      <artifactId>beam-sdks-java-io-hadoop-format</artifactId>
+      <version>2.33.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.beam</groupId>
+      <artifactId>beam-runners-google-cloud-dataflow-java</artifactId>
+      <version>2.33.0</version>
+      <exclusions>
+        <exclusion>
+          <!-- Avoid conflicts with commons-logging: beam-sdks-java-io-kafka pulls in spring-core which hijacks commons-logging -->
+          <groupId>org.springframework</groupId>
+          <artifactId>spring-jcl</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+	    <groupId>org.apache.hbase</groupId>
+	    <artifactId>hbase-server</artifactId>
+    	<version>0.98.19-hadoop2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>2.5.0</version>
+    </dependency>
+
+    <!-- Implementation deps -->
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-bigtable</artifactId>
+    </dependency>
+
+    <!-- Test -->
+    <!-- <dependency>
+      <groupId>com.google.cloud.bigtable</groupId>
+      <artifactId>bigtable-internal-test-helper</artifactId>
+      <version>2.14.1</version> {x-version-update:bigtable-client-parent:current}
+      <scope>test</scope>
+    </dependency> -->
+    <dependency>
+      <groupId>com.google.api.grpc</groupId>
+      <artifactId>grpc-google-common-protos</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.api.grpc</groupId>
+      <artifactId>grpc-google-cloud-bigtable-admin-v2</artifactId>
+      <scope>test</scope>
+    </dependency>
 
 </dependencies>
 
@@ -109,6 +168,26 @@
         <source>17</source>
         <target>17</target>
       </configuration>
+    </plugin>
+    <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>0.6.1</version>
+        <extensions>true</extensions>
+        <executions>
+            <execution>
+                <goals>
+                    <goal>compile</goal>
+                    <goal>test-compile</goal>
+                </goals>
+            </execution>
+        </executions>
+        <configuration>
+            <additionalProtoPathElements>
+                <additionalProtoPathElement>${project.basedir}/src/main/resources</additionalProtoPathElement>
+            </additionalProtoPathElements>
+            <protocArtifact>com.google.protobuf:protoc:3.7.0:exe:${os.detected.classifier}</protocArtifact>
+        </configuration>
     </plugin>
   </plugins>
 </build>

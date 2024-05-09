@@ -29,7 +29,6 @@ services:
     stdin_open: true
     tty: true
     volumes:
-      - ./sequencefile:/sequencefile
       - ./output:/output
 
   #pipeline:
@@ -56,6 +55,6 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./sequencefile:/sequencefile
+      - ./output/sequencefile:/output/sequencefile
     depends_on:
       - bigtable-emulator
