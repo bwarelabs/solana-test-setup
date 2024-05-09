@@ -1,5 +1,9 @@
 .idea
-/hbase/output
+.vscode
 
-/pipeline/venv
-/pipeline/output
+*/output
+/output
+
+*/venv
+*/target
+

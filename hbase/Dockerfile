@@ -19,15 +19,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get -qq update && \
   DEBIAN_FRONTEND=noninteractive apt-get -qq install --no-install-recommends -y \
-    ca-certificates=20211016 \
-    curl='7.81.0-*' \
-    git='1:2.34.1-*' \
-    locales='2.35-*' \
-    && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* \
-    && \
-    locale-gen en_US.UTF-8
+  ca-certificates=20211016 \
+  curl='7.81.0-*' \
+  git='1:2.34.1-*' \
+  locales='2.35-*' \
+  && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* \
+  && \
+  locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
 FROM base_image AS maven_download_image
@@ -76,14 +76,14 @@ ENV PATH "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
 WORKDIR /root
 ARG BRANCH_OR_TAG=master
 RUN git clone --depth 1 -b ${BRANCH_OR_TAG} https://github.com/apache/hbase.git \
-    && \
-    mvn -T1C clean install -DskipTests assembly:single -f ./hbase/pom.xml \
-    && \
-    mkdir -p hbase-bin \
-    && \
-    find /root/hbase/hbase-assembly/target -iname '*.tar.gz' -not -iname '*client*' \
-    | head -n 1 \
-    | xargs -I{} tar xzf {} --strip-components 1 -C /root/hbase-bin
+  && \
+  mvn -T1C clean install -DskipTests assembly:single -f ./hbase/pom.xml \
+  && \
+  mkdir -p hbase-bin \
+  && \
+  find /root/hbase/hbase-assembly/target -iname '*.tar.gz' -not -iname '*client*' \
+  | head -n 1 \
+  | xargs -I{} tar xzf {} --strip-components 1 -C /root/hbase-bin
 
 # Set HBASE_HOME, add it to the path, and start HBase.
 ENV HBASE_HOME /root/hbase-bin

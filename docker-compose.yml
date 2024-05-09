@@ -17,19 +17,20 @@ services:
     depends_on:
       - bigtable-emulator
 
-  # hbase:
-  #   build:
-  #     dockerfile: hbase/Dockerfile
-  #   ports:
-  #     - "16010:16010"
-  #     - "16020:16020"
-  #     - "16030:16030"
-  #     - "2181:2181"
-  #   volumes:
-  #     - ./data:/data
-  #   command: ["/bin/bash", "-c", "start-hbase.sh; hbase shell", wait]
-  #   networks:
-  #     - app-network
+  hbase:
+    build:
+      context: ./hbase
+      dockerfile: Dockerfile
+    ports:
+      - "16010:16010"
+      - "16020:16020"
+      - "16030:16030"
+      - "2181:2181"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./sequencefile:/sequencefile
+      - ./output:/output
 
   #pipeline:
   #  build:
@@ -44,7 +45,7 @@ services:
   #    - ./output:/output
   #  depends_on:
   #    - bigtable-emulator
-  
+
   syncer:
     build:
       dockerfile: Dockerfile
@@ -55,6 +56,6 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./output:/output
+      - ./sequencefile:/sequencefile
     depends_on:
       - bigtable-emulator
