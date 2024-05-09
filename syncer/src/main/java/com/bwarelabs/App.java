@@ -1,4 +1,3 @@
-// original backup
 package com.bwarelabs;
 
 import com.google.common.collect.Lists;
@@ -53,6 +52,7 @@ public class App {
                   123456,
                   Type.Put.getCode(),
                   ("value" + i).getBytes())));
+
       data.add(KV.of(rowKey, value));
     }
 
@@ -92,60 +92,68 @@ public class App {
   }
 
   public static void main(String[] args) throws IOException {
-    // call testSimpleWritable
-    App app = new App();
-    System.out.println("Calling testHBaseTypes()...");
-    try {
-      app.testHBaseTypes();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-    System.out.println("testHBaseTypes() done.");
+    // // call testSimpleWritable
+    // App app = new App();
+    // System.out.println("Calling testHBaseTypes()...");
+    // try {
+    // app.testHBaseTypes();
+    // } catch (Exception e) {
+    // e.printStackTrace();
+    // }
+    // System.out.println("testHBaseTypes() done.");
 
-    return;
+    // return;
 
     // Bigtable Configuration
-    // Configuration config = BigtableConfiguration.configure("emulator",
-    // "solana-ledger");
-    // Connection connection = BigtableConfiguration.connect(config);
-    // Table table = connection.getTable(TableName.valueOf("tx"));
+    Configuration config = BigtableConfiguration.configure("emulator",
+        "solana-ledger");
+    Connection connection = BigtableConfiguration.connect(config);
+    Table table = connection.getTable(TableName.valueOf("tx"));
 
-    // // Hadoop Configuration for SequenceFile
+    // Hadoop Configuration for SequenceFile
 
-    // Configuration hadoopConfig = new Configuration();
+    Configuration hadoopConfig = new Configuration();
+    hadoopConfig.setStrings(
+        "io.serializations",
+        ResultSerialization.class.getName(),
+        WritableSerialization.class.getName());
 
-    // Path path = new Path("file:///output/sequencefile/tx.seq");
-    // ImmutableBytesWritable key = new ImmutableBytesWritable();
-    // Result value = new Result();
+    Path path = new Path("file:///output/sequencefile/tx.seq");
+    ImmutableBytesWritable key = new ImmutableBytesWritable();
+    Result value = new Result();
 
-    // RawLocalFileSystem fs = new RawLocalFileSystem();
-    // fs.setConf(hadoopConfig);
-    // SequenceFile.Writer writer = null;
+    RawLocalFileSystem fs = new RawLocalFileSystem();
+    fs.setConf(hadoopConfig);
+    Writer writer = null;
 
-    // try {
-    // writer = SequenceFile.createWriter(hadoopConfig,
-    // SequenceFile.Writer.file(fs.makeQualified(path)),
-    // SequenceFile.Writer.keyClass(Text.class),
-    // SequenceFile.Writer.valueClass(Text.class),
-    // SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+    try {
+      writer = SequenceFile.createWriter(hadoopConfig,
+          SequenceFile.Writer.file(fs.makeQualified(path)),
+          SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
+          SequenceFile.Writer.valueClass(Result.class),
+          SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
 
-    // Scan scan = new Scan();
-    // ResultScanner scanner = table.getScanner(scan);
+      Scan scan = new Scan();
+      ResultScanner scanner = table.getScanner(scan);
 
-    // for (Result result : scanner) {
-    // ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
+      int numberOfRows = 0;
+      for (Result result : scanner) {
+        numberOfRows++;
+        ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
+        writer.append(rowKey, result);
+      }
 
-    // writer.append(rowKey, new ResultWritable(result));
-    // }
+      System.out.println("Number of rows: " + numberOfRows);
 
-    // } finally
+    } finally
 
-    // {
-    // if (writer != null) {
-    // writer.close();
-    // }
-    // table.close();
-    // connection.close();
-    // }
+    {
+      if (writer != null) {
+        System.out.println("Closing writer...");
+        writer.close();
+      }
+      table.close();
+      connection.close();
+    }
   }
 }
