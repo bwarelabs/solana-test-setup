@@ -7,7 +7,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.hfile.ChecksumUtil;
 import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -38,11 +37,17 @@ public class App {
     App app = new App();
     try {
       app.writeSequenceFileFromTable(connection, "blocks");
-      // app.writeSequenceFileFromTable(connection, "entries");
-      // app.writeSequenceFileFromTable(connection, "tx");
-      // app.writeSequenceFileFromTable(connection, "tx-by-addr");
+      app.writeSequenceFileFromTable(connection, "entries");
+      app.writeSequenceFileFromTable(connection, "tx");
+      app.writeSequenceFileFromTable(connection, "tx-by-addr");
 
-      app.readDataAndCalculateChecksum("blocks");
+      // the files need to be imported into HDFS before running the
+      // readDataAndCalculateChecksum
+
+      // app.readDataAndCalculateChecksum("blocks");
+      // app.readDataAndCalculateChecksum("entries");
+      // app.readDataAndCalculateChecksum("tx");
+      // app.readDataAndCalculateChecksum("tx-by-addr");
     } catch (IOException e) {
       e.printStackTrace();
     } finally {
@@ -87,7 +92,6 @@ public class App {
         ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
         writer.append(rowKey, result);
 
-        // int checksum = calculateByteAdditionChecksum(result);
         String checksum = null;
         try {
           checksum = calculateSHA256Checksum(result);
@@ -110,22 +114,9 @@ public class App {
     }
   }
 
-  private int calculateByteAdditionChecksum(Result result) throws IOException {
-    int checksum = 0;
-    CellScanner scanner = result.cellScanner();
-    while (scanner.advance()) {
-      byte[] value = scanner.current().getValueArray();
-      for (byte b : value) {
-        checksum += b;
-      }
-
-    }
-    return checksum;
-  }
-
   private void readDataAndCalculateChecksum(String tableName) throws IOException {
     System.out.println("Reading data from table: " + tableName);
-    // Set up HBase configuration
+
     org.apache.hadoop.conf.Configuration config = HBaseConfiguration.create();
     config.set("hbase.zookeeper.quorum", "hbase");
     config.set("hbase.zookeeper.property.clientPort", "2181");
@@ -137,7 +128,6 @@ public class App {
       int numberOfRows = 0;
       try (ResultScanner scanner = table.getScanner(scan)) {
         for (Result result : scanner) {
-          // int checksum = calculateByteAdditionChecksum(result);
 
           String checksum = null;
           try {
@@ -174,6 +164,20 @@ public class App {
       hexString.append(hex);
     }
     return hexString.toString();
+  }
+
+  @SuppressWarnings("unused")
+  private int calculateByteAdditionChecksum(Result result) throws IOException {
+    int checksum = 0;
+    CellScanner scanner = result.cellScanner();
+    while (scanner.advance()) {
+      byte[] value = scanner.current().getValueArray();
+      for (byte b : value) {
+        checksum += b;
+      }
+
+    }
+    return checksum;
   }
 
 }
