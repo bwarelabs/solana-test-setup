@@ -18,6 +18,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import org.apache.hadoop.io.SequenceFile.Writer;
 
@@ -70,11 +72,11 @@ public class App {
     Writer writer = null;
 
     try {
-      // writer = SequenceFile.createWriter(hadoopConfig,
-      // SequenceFile.Writer.file(fs.makeQualified(path)),
-      // SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
-      // SequenceFile.Writer.valueClass(Result.class),
-      // SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+      writer = SequenceFile.createWriter(hadoopConfig,
+          SequenceFile.Writer.file(fs.makeQualified(path)),
+          SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
+          SequenceFile.Writer.valueClass(Result.class),
+          SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
 
       Scan scan = new Scan();
       ResultScanner scanner = table.getScanner(scan);
@@ -83,9 +85,15 @@ public class App {
       for (Result result : scanner) {
         numberOfRows++;
         ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
-        // writer.append(rowKey, result);
+        writer.append(rowKey, result);
 
-        int checksum = calculateByteAdditionChecksum(result);
+        // int checksum = calculateByteAdditionChecksum(result);
+        String checksum = null;
+        try {
+          checksum = calculateSHA256Checksum(result);
+        } catch (NoSuchAlgorithmException | IOException e) {
+          e.printStackTrace();
+        }
         System.out.println("Checksum for row " + numberOfRows + ": " + checksum);
       }
 
@@ -96,7 +104,7 @@ public class App {
     {
       if (writer != null) {
         System.out.println("Closing writer...");
-        // writer.close();
+        writer.close();
       }
       table.close();
     }
@@ -129,13 +137,43 @@ public class App {
       int numberOfRows = 0;
       try (ResultScanner scanner = table.getScanner(scan)) {
         for (Result result : scanner) {
-          int checksum = calculateByteAdditionChecksum(result);
-          System.out.println("Checksum for row: " + checksum);
+          // int checksum = calculateByteAdditionChecksum(result);
 
+          String checksum = null;
+          try {
+            checksum = calculateSHA256Checksum(result);
+          } catch (NoSuchAlgorithmException | IOException e) {
+            e.printStackTrace();
+          }
           numberOfRows++;
+
+          System.out.println("Checksum for row " + numberOfRows + ": " + checksum);
         }
       }
       System.out.println("Number of rows read: " + numberOfRows);
     }
   }
+
+  private String calculateSHA256Checksum(Result result) throws NoSuchAlgorithmException, IOException {
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+    CellScanner scanner = result.cellScanner();
+
+    while (scanner.advance()) {
+      byte[] value = scanner.current().getValueArray();
+      int valueOffset = scanner.current().getValueOffset();
+      int valueLength = scanner.current().getValueLength();
+      digest.update(value, valueOffset, valueLength);
+    }
+
+    byte[] hashBytes = digest.digest();
+    StringBuilder hexString = new StringBuilder();
+    for (int i = 0; i < hashBytes.length; i++) {
+      String hex = Integer.toHexString(0xff & hashBytes[i]);
+      if (hex.length() == 1)
+        hexString.append('0');
+      hexString.append(hex);
+    }
+    return hexString.toString();
+  }
+
 }
