@@ -7,6 +7,8 @@ services:
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+    networks:
+      - solana
 
   validator:
     build:
@@ -16,6 +18,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
     depends_on:
       - bigtable-emulator
+    networks:
+      - solana
 
   hbase:
     build:
@@ -30,20 +34,8 @@ services:
     tty: true
     volumes:
       - ./output:/output
-
-  #pipeline:
-  #  build:
-  #    dockerfile: Dockerfile
-  #    context: ./pipeline
-  #  environment:
-  #    BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
-  #    # GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
-  #  ports:
-  #    - "9090:9090"
-  #  volumes:
-  #    - ./output:/output
-  #  depends_on:
-  #    - bigtable-emulator
+    networks:
+      - solana
 
   syncer:
     build:
@@ -58,3 +50,8 @@ services:
       - ./output/sequencefile:/output/sequencefile
     depends_on:
       - bigtable-emulator
+    networks:
+      - solana
+
+networks:
+  solana:
