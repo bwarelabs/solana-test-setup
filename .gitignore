@@ -1,1 +1,9 @@
 .idea
+.vscode
+
+*/output
+/output
+
+*/venv
+*/target
+
