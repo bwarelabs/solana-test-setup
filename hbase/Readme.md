@@ -11,4 +11,4 @@ The HBase ZooKeper is exposed on port `2181` and Thrift on port `9090`.
 - Create table: `create 'table_name', 'cf'` (there is only one column family in solana called `x`) (e.g. `create 'blocks', 'x'`)
 - List tables: `list`
 - Scan table: `scan 'table_name'` (e.g. `scan 'blocks'`, or `scan 'test-table', {'LIMIT' => 5}`)
-- Import data: `hbase org.apache.hadoop.hbase.mapreduce.Driver import table_name /output/sequencefiles/table_name` (e.g. `hbase org.apache.hadoop.hbase.mapreduce.Driver import blocks /output/sequencefiles/blocks`, run this command from the docker container, not from the hbase shell)
+- Import data: `hbase org.apache.hadoop.hbase.mapreduce.Driver import table_name /output/sequencefile/table_name` (e.g. `hbase org.apache.hadoop.hbase.mapreduce.Driver import blocks /output/sequencefile/blocks`, run this command from the docker container, not from the hbase shell)
