@@ -76,4 +76,4 @@ RUN sed -i '/<\/configuration>/i \ \ <property>\n    <name>hbase.zookeeper.prope
 ENV HBASE_HOME /root/hbase-bin
 ENV PATH "/root/hbase-bin/bin:${PATH}"
 
-CMD ["/bin/bash", "-c", "start-hbase.sh; hbase shell"]
+CMD ["/bin/bash", "-c", "start-hbase.sh; hbase thrift start -p 9090; hbase shell"]
