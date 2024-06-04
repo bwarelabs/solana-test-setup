@@ -13,7 +13,7 @@ services:
       dockerfile: validator/Dockerfile
     network_mode: host
     environment:
-      BIGTABLE_EMULATOR_HOST: localhost:50051
+      BIGTABLE_EMULATOR_HOST: localhost:50051 # use the solana adapter instead of bigtable -> https://github.com/bwarelabs/solana-bigtable-hbase-adapter
       # BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
     depends_on:
