@@ -1,6 +1,6 @@
 # Solana Test Environment with Google BigTable Emulator
 
-This repository contains a Docker-based setup for a Solana test environment integrated with a Google BigTable emulator. The environment includes 4 main services:
+This repository contains a Docker-based setup for a Solana test environment integrated with a Google BigTable emulator. The environment includes 6 main services:
 
 1. **BigTable Emulator**: Simulates Google BigTable for local testing without needing to interact with Google Cloud.
 2. **Solana Test Validator**: A custom Solana Warehouse test node that generates a local network and simulates transactions while uploading them to the BigTable emulator.
