@@ -38,7 +38,7 @@ public class App {
     boolean runChecksumOnHBase = false;
 
     // Parse command-line arguments
-    for (String arg : args) {
+    for (String arg: args) {
       if (arg.startsWith("read-source=")) {
         readSource = arg.split("=")[1];
       } else if (arg.equals("run-checksum-on-hbase")) {
@@ -91,7 +91,7 @@ public class App {
   private void writeSequenceFileFromBigTable(App app) {
     // Bigtable Configuration
     Configuration config = BigtableConfiguration.configure("emulator",
-        "solana-ledger");
+            "solana-ledger");
 
     try (Connection connection = BigtableConfiguration.connect(config)) {
       app.writeSequenceFileFromTable(connection, "blocks");
@@ -111,9 +111,9 @@ public class App {
     // Hadoop Configuration for SequenceFile
     Configuration hadoopConfig = new Configuration();
     hadoopConfig.setStrings(
-        "io.serializations",
-        ResultSerialization.class.getName(),
-        WritableSerialization.class.getName());
+            "io.serializations",
+            ResultSerialization.class.getName(),
+            WritableSerialization.class.getName());
 
     Path path = new Path("file:///output/sequencefile/" + tableName + "/" + tableName + ".seq");
 
@@ -123,16 +123,16 @@ public class App {
 
     try {
       writer = SequenceFile.createWriter(hadoopConfig,
-          SequenceFile.Writer.file(fs.makeQualified(path)),
-          SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
-          SequenceFile.Writer.valueClass(Result.class),
-          SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+              SequenceFile.Writer.file(fs.makeQualified(path)),
+              SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
+              SequenceFile.Writer.valueClass(Result.class),
+              SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
 
       Scan scan = new Scan();
       ResultScanner scanner = table.getScanner(scan);
 
       int numberOfRows = 0;
-      for (Result result : scanner) {
+      for (Result result: scanner) {
         numberOfRows++;
         ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
         writer.append(rowKey, result);
@@ -167,13 +167,12 @@ public class App {
     config.set("hbase.zookeeper.quorum", "hbase");
     config.set("hbase.zookeeper.property.clientPort", "2181");
 
-    try (Connection connection = ConnectionFactory.createConnection(config);
-        Table table = connection.getTable(TableName.valueOf(tableName))) {
+    try (Connection connection = ConnectionFactory.createConnection(config); Table table = connection.getTable(TableName.valueOf(tableName))) {
 
       Scan scan = new Scan();
       int numberOfRows = 0;
       try (ResultScanner scanner = table.getScanner(scan)) {
-        for (Result result : scanner) {
+        for (Result result: scanner) {
 
           String checksum = null;
           try {
@@ -203,7 +202,7 @@ public class App {
 
     byte[] hashBytes = digest.digest();
     StringBuilder hexString = new StringBuilder();
-    for (byte hashByte : hashBytes) {
+    for (byte hashByte: hashBytes) {
       String hex = Integer.toHexString(0xff & hashByte);
       if (hex.length() == 1)
         hexString.append('0');
@@ -218,7 +217,7 @@ public class App {
     CellScanner scanner = result.cellScanner();
     while (scanner.advance()) {
       byte[] value = scanner.current().getValueArray();
-      for (byte b : value) {
+      for (byte b: value) {
         checksum += b;
       }
 
@@ -242,9 +241,9 @@ public class App {
       RawLocalFileSystem fs = new RawLocalFileSystem();
       fs.setConf(hadoopConfig);
       Writer entriesWriter = null;
-        Writer blocksWriter = null;
-        Writer txWriter = null;
-        Writer txByAddrWriter = null;
+      Writer blocksWriter = null;
+      Writer txWriter = null;
+      Writer txByAddrWriter = null;
 
 
       try {
@@ -267,10 +266,10 @@ public class App {
                 SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
 
         txByAddrWriter = SequenceFile.createWriter(hadoopConfig,
-          SequenceFile.Writer.file(new org.apache.hadoop.fs.Path(txByAddrPath.toUri())),
-            SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
+                SequenceFile.Writer.file(new org.apache.hadoop.fs.Path(txByAddrPath.toUri())),
+                SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
                 SequenceFile.Writer.valueClass(Result.class),
-            SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+                SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
 
 
         Writer finalEntriesWriter = entriesWriter;
@@ -278,7 +277,7 @@ public class App {
         Writer finalTxWriter = txWriter;
         Writer finalTxByAddrWriter = txByAddrWriter;
 
-        Files.walkFileTree(inputDir, new SimpleFileVisitor<java.nio.file.Path>() {
+        Files.walkFileTree(inputDir, new SimpleFileVisitor < java.nio.file.Path > () {
           @Override
           public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException {
             if (!Files.isDirectory(file)) {
@@ -286,9 +285,9 @@ public class App {
               String[] pathParts = filePath.split("/");
               String fileName = pathParts[pathParts.length - 1];
               String folderName = pathParts[pathParts.length - 2];
-              String rowKeyWithoutExtension = fileName.contains(".")
-                      ? fileName.substring(0, fileName.lastIndexOf('.'))
-                      : fileName;
+              String rowKeyWithoutExtension = fileName.contains(".") ?
+                      fileName.substring(0, fileName.lastIndexOf('.')) :
+                      fileName;
 
               byte[] fileContent = Files.readAllBytes(file);
               ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
