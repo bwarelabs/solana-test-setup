@@ -23,39 +23,75 @@ import java.security.NoSuchAlgorithmException;
 import org.apache.hadoop.io.SequenceFile.Writer;
 
 import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
 
 public class App {
 
   public static void main(String[] args) throws IOException {
+    String readSource = null;
+    boolean runChecksumOnHBase = false;
 
-    // Bigtable Configuration
-    Configuration config = BigtableConfiguration.configure("emulator",
-        "solana-ledger");
-    Connection connection = BigtableConfiguration.connect(config);
+    // Parse command-line arguments
+    for (String arg : args) {
+      if (arg.startsWith("read-source=")) {
+        readSource = arg.split("=")[1];
+      } else if (arg.equals("run-checksum-on-hbase")) {
+        runChecksumOnHBase = true;
+      }
+    }
+
+    if ((readSource != null && runChecksumOnHBase) || (readSource == null && !runChecksumOnHBase)) {
+      System.out.println("Error: Specify either 'read-source' or 'run-checksum-on-hbase', but not both.");
+      return;
+    }
 
     App app = new App();
-    try {
-      app.writeSequenceFileFromTable(connection, "blocks");
-      app.writeSequenceFileFromTable(connection, "entries");
-      app.writeSequenceFileFromTable(connection, "tx");
-      app.writeSequenceFileFromTable(connection, "tx-by-addr");
 
+
+    if (readSource == null) {
       // the files need to be imported into HDFS before running the
       // readDataAndCalculateChecksum
 
-      // app.readDataAndCalculateChecksum("blocks");
-      // app.readDataAndCalculateChecksum("entries");
-      // app.readDataAndCalculateChecksum("tx");
-      // app.readDataAndCalculateChecksum("tx-by-addr");
-    } catch (IOException e) {
-      e.printStackTrace();
-    } finally {
-      connection.close();
+      System.out.println("Running checksum calculation on HBase tables.");
+      app.readDataAndCalculateChecksum("blocks");
+      app.readDataAndCalculateChecksum("entries");
+      app.readDataAndCalculateChecksum("tx");
+      app.readDataAndCalculateChecksum("tx-by-addr");
+
+      System.out.println("Done!");
+      return;
     }
 
-    System.out.println("Done!");
-    return;
+    if (readSource.equals("bigtable")) {
+      System.out.println("Writing SequenceFiles from Bigtable tables.");
+      app.writeSequenceFileFromBigTabe(app);
+
+      System.out.println("Done!");
+      return;
+    }
+
+    if (readSource.equals("local-files")){
+      System.out.println("Reading data from local files from path '/input/storage'");
+
+      System.out.println("Done!");
+      return;
+    }
+
+    System.out.println("Error: Invalid 'read-source' argument. Valid values are 'bigtable' and 'local-files'.");
+  }
+
+  private void writeSequenceFileFromBigTabe(App app) {
+    // Bigtable Configuration
+    Configuration config = BigtableConfiguration.configure("emulator",
+            "solana-ledger");
+
+      try (Connection connection = BigtableConfiguration.connect(config)) {
+          app.writeSequenceFileFromTable(connection, "blocks");
+          app.writeSequenceFileFromTable(connection, "entries");
+          app.writeSequenceFileFromTable(connection, "tx");
+          app.writeSequenceFileFromTable(connection, "tx-by-addr");
+      } catch (IOException e) {
+          e.printStackTrace();
+      }
   }
 
   private void writeSequenceFileFromTable(Connection connection, String tableName) throws IOException {
@@ -157,12 +193,12 @@ public class App {
 
     byte[] hashBytes = digest.digest();
     StringBuilder hexString = new StringBuilder();
-    for (int i = 0; i < hashBytes.length; i++) {
-      String hex = Integer.toHexString(0xff & hashBytes[i]);
-      if (hex.length() == 1)
-        hexString.append('0');
-      hexString.append(hex);
-    }
+      for (byte hashByte : hashBytes) {
+          String hex = Integer.toHexString(0xff & hashByte);
+          if (hex.length() == 1)
+              hexString.append('0');
+          hexString.append(hex);
+      }
     return hexString.toString();
   }
 
