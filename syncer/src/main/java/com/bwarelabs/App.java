@@ -63,7 +63,7 @@ public class App {
 
     if (readSource.equals("bigtable")) {
       System.out.println("Writing SequenceFiles from Bigtable tables.");
-      app.writeSequenceFileFromBigTabe(app);
+      app.writeSequenceFileFromBigTable(app);
 
       System.out.println("Done!");
       return;
@@ -79,7 +79,7 @@ public class App {
     System.out.println("Error: Invalid 'read-source' argument. Valid values are 'bigtable' and 'local-files'.");
   }
 
-  private void writeSequenceFileFromBigTabe(App app) {
+  private void writeSequenceFileFromBigTable(App app) {
     // Bigtable Configuration
     Configuration config = BigtableConfiguration.configure("emulator",
             "solana-ledger");
