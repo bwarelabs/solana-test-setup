@@ -7,9 +7,9 @@ This folder contains a Docker-based setup for the Syncer service. The syncer rea
 * exec into the container
 `docker compose exec syncer /bin/bash`
 
-* start the process
-`java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar`
-`java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable`
+* start the process  
+`java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar`  
+`java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable`  
 `java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar run-checksum-on-hbase`
 
 * it writes each data into `./output/sequencefiles/{table_name}` directory
