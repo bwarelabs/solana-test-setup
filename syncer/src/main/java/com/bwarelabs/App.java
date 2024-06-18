@@ -280,68 +280,70 @@ public class App {
         Files.walkFileTree(inputDir, new SimpleFileVisitor < java.nio.file.Path > () {
           @Override
           public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException {
-            if (!Files.isDirectory(file)) {
-              String filePath = file.toString();
-              String[] pathParts = filePath.split("/");
-              String fileName = pathParts[pathParts.length - 1];
-              String folderName = pathParts[pathParts.length - 2];
-              String rowKeyWithoutExtension = fileName.contains(".") ?
-                      fileName.substring(0, fileName.lastIndexOf('.')) :
-                      fileName;
+            if (Files.isDirectory(file)) {
+              return FileVisitResult.CONTINUE;
+            }
 
-              byte[] fileContent = Files.readAllBytes(file);
-              ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
-              long timestamp = System.currentTimeMillis();
+            String filePath = file.toString();
+            String[] pathParts = filePath.split("/");
+            String fileName = pathParts[pathParts.length - 1];
+            String folderName = pathParts[pathParts.length - 2];
+            String rowKeyWithoutExtension = fileName.contains(".") ?
+                    fileName.substring(0, fileName.lastIndexOf('.')) :
+                    fileName;
 
-              String columnFamily = "x";
-              String qualifier;
+            byte[] fileContent = Files.readAllBytes(file);
+            ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
+            long timestamp = System.currentTimeMillis();
 
-              switch (folderName) {
-                case "entries":
-                case "blocks":
-                case "tx_by_addr":
-                  qualifier = "proto";
-                  break;
-                case "tx":
-                  qualifier = "bin";
-                  break;
-                default:
-                  System.out.println("Unknown folder type: " + folderName);
-                  return FileVisitResult.CONTINUE;
-              }
+            String columnFamily = "x";
+            String qualifier;
 
-              // remove the termination from the file name
-              String fileNameWithoutTermination = fileName.substring(0, fileName.lastIndexOf('.'));
+            switch (folderName) {
+              case "entries":
+              case "blocks":
+              case "tx_by_addr":
+                qualifier = "proto";
+                break;
+              case "tx":
+                qualifier = "bin";
+                break;
+              default:
+                System.out.println("Unknown folder type: " + folderName);
+                return FileVisitResult.CONTINUE;
+            }
 
-              Cell cell = CellUtil.createCell(
-                      Bytes.toBytes(fileNameWithoutTermination), // row key
-                      Bytes.toBytes(columnFamily),
-                      Bytes.toBytes(qualifier), // column qualifier
-                      timestamp,
-                      Cell.Type.Put.getCode(),
-                      fileContent
-              );
+            // remove the termination from the file name
+            String fileNameWithoutTermination = fileName.substring(0, fileName.lastIndexOf('.'));
 
-              Result result = Result.create(Collections.singletonList(cell));
+            Cell cell = CellUtil.createCell(
+                    Bytes.toBytes(fileNameWithoutTermination), // row key
+                    Bytes.toBytes(columnFamily),
+                    Bytes.toBytes(qualifier), // column qualifier
+                    timestamp,
+                    Cell.Type.Put.getCode(),
+                    fileContent
+            );
 
-              switch (folderName) {
-                case "entries":
-                  finalEntriesWriter.append(key, result);
-                  System.out.println("Written to entries sequence file: " + filePath);
-                  break;
-                case "blocks":
-                  finalBlocksWriter.append(key, result);
-                  System.out.println("Written to blocks sequence file: " + filePath);
-                  break;
-                case "tx":
-                  finalTxWriter.append(key, result);
-                  System.out.println("Written to tx sequence file: " + filePath);
-                  break;
-                case "tx_by_addr":
-                  finalTxByAddrWriter.append(key, result);
-                  System.out.println("Written to tx_by_addr sequence file: " + filePath);
-                  break;
-              }
+            Result result = Result.create(Collections.singletonList(cell));
+
+            switch (folderName) {
+              case "entries":
+                finalEntriesWriter.append(key, result);
+                System.out.println("Written to entries sequence file: " + filePath);
+                break;
+              case "blocks":
+                finalBlocksWriter.append(key, result);
+                System.out.println("Written to blocks sequence file: " + filePath);
+                break;
+              case "tx":
+                finalTxWriter.append(key, result);
+                System.out.println("Written to tx sequence file: " + filePath);
+                break;
+              case "tx_by_addr":
+                finalTxByAddrWriter.append(key, result);
+                System.out.println("Written to tx_by_addr sequence file: " + filePath);
+                break;
             }
             return FileVisitResult.CONTINUE;
           }
