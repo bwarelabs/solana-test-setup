@@ -292,6 +292,14 @@ public class App {
                     fileName.substring(0, fileName.lastIndexOf('.')) :
                     fileName;
 
+            if (folderName.equals("tx_by_addr")) {
+//              if (fileName.startsWith("Vote")) {
+//                System.out.println("Skipping file: " + fileName);
+//                return FileVisitResult.CONTINUE;
+//              }
+              rowKeyWithoutExtension = rowKeyWithoutExtension.replace("_", "/");
+            }
+
             byte[] fileContent = Files.readAllBytes(file);
             ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
             long timestamp = System.currentTimeMillis();
@@ -313,11 +321,8 @@ public class App {
                 return FileVisitResult.CONTINUE;
             }
 
-            // remove the termination from the file name
-            String fileNameWithoutTermination = fileName.substring(0, fileName.lastIndexOf('.'));
-
             Cell cell = CellUtil.createCell(
-                    Bytes.toBytes(fileNameWithoutTermination), // row key
+                    rowKeyWithoutExtension.getBytes(), // row key
                     Bytes.toBytes(columnFamily),
                     Bytes.toBytes(qualifier), // column qualifier
                     timestamp,
@@ -342,7 +347,7 @@ public class App {
                 break;
               case "tx_by_addr":
                 finalTxByAddrWriter.append(key, result);
-                System.out.println("Written to tx_by_addr sequence file: " + filePath);
+                System.out.println("Written to tx-by-addr sequence file: " + filePath);
                 break;
             }
             return FileVisitResult.CONTINUE;
