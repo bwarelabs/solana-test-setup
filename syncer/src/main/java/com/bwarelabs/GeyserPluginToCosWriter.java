@@ -50,115 +50,134 @@ public class GeyserPluginToCosWriter {
 
     public static void write() {
         System.out.println("Starting write process...");
-        writeSequenceFileFromLocalFiles(java.nio.file.Paths.get("/input/storage"));
+
+        try {
+            // List slot range directories
+            Files.list(Paths.get("/input/storage"))
+                    .filter(Files::isDirectory)
+                    .forEach(slotRangeDir -> processSlotRange(slotRangeDir));
+
+            System.out.println("All slot ranges processed and uploaded.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    private static void writeSequenceFileFromLocalFiles(java.nio.file.Path inputDir) {
+    private static void processSlotRange(Path slotRangeDir) {
+        System.out.println("Processing slot range: " + slotRangeDir.getFileName());
+
         try {
             Configuration hadoopConfig = new Configuration();
             hadoopConfig.setStrings("io.serializations", WritableSerialization.class.getName(), ResultSerialization.class.getName());
 
+            // Create writers for each category within this slot range
+            CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream(slotRangeDir, "entries");
+            CustomSequenceFileWriter entriesWriter = createWriter(hadoopConfig, entriesStream);
 
-            CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream("sequencefile/entries/entries.seq");
-            final CustomSequenceFileWriter entriesWriter = createWriter(hadoopConfig, entriesStream);
+            CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream(slotRangeDir, "blocks");
+            CustomSequenceFileWriter blocksWriter = createWriter(hadoopConfig, blocksStream);
 
+            CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx");
+            CustomSequenceFileWriter txWriter = createWriter(hadoopConfig, txStream);
 
-            CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream("sequencefile/blocks/blocks.seq");
-            final CustomSequenceFileWriter blocksWriter = createWriter(hadoopConfig, blocksStream);
+            CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx_by_addr");
+            CustomSequenceFileWriter txByAddrWriter = createWriter(hadoopConfig, txByAddrStream);
 
-
-            CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream("sequencefile/tx/tx.seq");
-            final CustomSequenceFileWriter txWriter = createWriter(hadoopConfig, txStream);
-
-
-            CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream("sequencefile/tx_by_addr/tx_by_addr.seq");
-            final CustomSequenceFileWriter txByAddrWriter = createWriter(hadoopConfig, txByAddrStream);
-
-
-            Files.walkFileTree(inputDir, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException {
-                    if (Files.isDirectory(file)) {
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    String filePath = file.toString();
-                    String[] pathParts = filePath.split("/");
-                    String fileName = pathParts[pathParts.length - 1];
-                    String folderName = pathParts[pathParts.length - 2];
-                    String rowKeyWithoutExtension = fileName.contains(".") ?
-                            fileName.substring(0, fileName.lastIndexOf('.')) :
-                            fileName;
-
-                    if (folderName.equals("tx_by_addr")) {
-                              if (fileName.startsWith("Vote")) {
-                                System.out.println("Skipping file: " + fileName);
-                                return FileVisitResult.CONTINUE;
-                              }
-                        rowKeyWithoutExtension = rowKeyWithoutExtension.replace("_", "/");
-                    }
-
-                    byte[] fileContent = Files.readAllBytes(file);
-                    ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
-                    long timestamp = System.currentTimeMillis(); // todo hbase timestamp
-
-                    String columnFamily = "x";
-                    String qualifier;
-
-                    switch (folderName) {
-                        case "entries":
-                        case "blocks":
-                        case "tx_by_addr":
-                            qualifier = "proto";
-                            break;
-                        case "tx":
-                            qualifier = "bin";
-                            break;
-                        default:
-                            System.out.println("Unknown folder type: " + folderName);
-                            return FileVisitResult.CONTINUE;
-                    }
-
-                    Cell cell = CellUtil.createCell(
-                            rowKeyWithoutExtension.getBytes(), // row key
-                            Bytes.toBytes(columnFamily),
-                            Bytes.toBytes(qualifier), // column qualifier
-                            timestamp,
-                            Cell.Type.Put.getCode(),
-                            fileContent
-                    );
-
-                    Result result = Result.create(Collections.singletonList(cell));
-
-                    switch (folderName) {
-                        case "entries":
-                            entriesWriter.append(key, result);
-                            break;
-                        case "blocks":
-                            blocksWriter.append(key, result);
-                            break;
-                        case "tx":
-                            txWriter.append(key, result);
-                            break;
-                        case "tx_by_addr":
-                            txByAddrWriter.append(key, result);
-                            break;
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            Files.list(slotRangeDir)
+                    .filter(Files::isDirectory)
+                    .forEach(slotDir -> {
+                        try {
+                            processSlot(slotDir, entriesWriter, blocksWriter, txWriter, txByAddrWriter);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    });
 
             entriesWriter.close();
             blocksWriter.close();
             txWriter.close();
             txByAddrWriter.close();
 
-            System.out.println("Finished writing sequence files to COS");
-
             waitForAsyncUploads(entriesStream, blocksStream, txStream, txByAddrStream);
+            System.out.println("Slot range processed: " + slotRangeDir.getFileName());
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private static void processSlot(Path slotDir, CustomSequenceFileWriter entriesWriter, CustomSequenceFileWriter blocksWriter, CustomSequenceFileWriter txWriter, CustomSequenceFileWriter txByAddrWriter) throws IOException {
+        Files.walkFileTree(slotDir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (Files.isDirectory(file)) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                String filePath = file.toString();
+                String[] pathParts = filePath.split("/");
+                String fileName = pathParts[pathParts.length - 1];
+                String folderName = pathParts[pathParts.length - 2];
+                String rowKeyWithoutExtension = fileName.contains(".") ?
+                        fileName.substring(0, fileName.lastIndexOf('.')) :
+                        fileName;
+
+                if (folderName.equals("tx_by_addr")) {
+                    if (fileName.startsWith("Vote")) {
+                        System.out.println("Skipping file: " + fileName);
+                        return FileVisitResult.CONTINUE;
+                    }
+                    rowKeyWithoutExtension = rowKeyWithoutExtension.replace("_", "/");
+                }
+
+                byte[] fileContent = Files.readAllBytes(file);
+                ImmutableBytesWritable key = new ImmutableBytesWritable(rowKeyWithoutExtension.getBytes());
+                long timestamp = System.currentTimeMillis();
+
+                String columnFamily = "x";
+                String qualifier;
+
+                switch (folderName) {
+                    case "entries":
+                    case "blocks":
+                    case "tx_by_addr":
+                        qualifier = "proto";
+                        break;
+                    case "tx":
+                        qualifier = "bin";
+                        break;
+                    default:
+                        System.out.println("Unknown folder type: " + folderName);
+                        return FileVisitResult.CONTINUE;
+                }
+
+                Cell cell = CellUtil.createCell(
+                        rowKeyWithoutExtension.getBytes(),
+                        Bytes.toBytes(columnFamily),
+                        Bytes.toBytes(qualifier),
+                        timestamp,
+                        Cell.Type.Put.getCode(),
+                        fileContent
+                );
+
+                Result result = Result.create(Collections.singletonList(cell));
+
+                switch (folderName) {
+                    case "entries":
+                        entriesWriter.append(key, result);
+                        break;
+                    case "blocks":
+                        blocksWriter.append(key, result);
+                        break;
+                    case "tx":
+                        txWriter.append(key, result);
+                        break;
+                    case "tx_by_addr":
+                        txByAddrWriter.append(key, result);
+                        break;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     private static CustomSequenceFileWriter createWriter(Configuration conf, FSDataOutputStream outputStream) throws IOException {
@@ -177,7 +196,6 @@ public class GeyserPluginToCosWriter {
         allUploads.join();
         System.out.println("All asynchronous uploads have completed.");
     }
-
 
     private static class CustomSequenceFileWriter {
         private final SequenceFile.Writer writer;
@@ -200,7 +218,6 @@ public class GeyserPluginToCosWriter {
             System.out.println("Closing custom sequence file writer");
             this.writer.close();
 
-            // for some reason, using the original SequenceFile.Writer didn't call close on the FSDataOutputStream
             if (fsDataOutputStream != null) {
                 fsDataOutputStream.close();
             }
@@ -212,15 +229,15 @@ public class GeyserPluginToCosWriter {
         private final String s3Key;
         private CompletableFuture<CompletedUpload> uploadFuture;
 
-        public CustomS3FSDataOutputStream(String s3Key) throws IOException {
-            this(new ByteArrayOutputStream(), s3Key);
+        public CustomS3FSDataOutputStream(Path slotRangeDir, String category) throws IOException {
+            this(new ByteArrayOutputStream(), slotRangeDir, category);
             System.out.println("CustomS3FSDataOutputStream created for key: " + s3Key);
         }
 
-        private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, String s3Key) {
+        private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, Path slotRangeDir, String category) {
             super(buffer, null);
             this.buffer = buffer;
-            this.s3Key = s3Key;
+            this.s3Key = slotRangeDir.getFileName() + "/sequencefile/" + category + "/" + category + ".seq";
         }
 
         @Override
