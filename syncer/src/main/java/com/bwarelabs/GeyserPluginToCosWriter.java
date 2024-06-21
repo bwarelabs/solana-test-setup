@@ -10,8 +10,9 @@ import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.serializer.WritableSerialization;
-import org.apache.hadoop.fs.Path;
 
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -22,36 +23,30 @@ import software.amazon.awssdk.transfer.s3.model.Upload;
 import software.amazon.awssdk.transfer.s3.progress.LoggingTransferListener;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
+import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 
 public class GeyserPluginToCosWriter {
-    private static final String BUCKET_NAME = "bucket3-1250000000";
-    private static final String COS_ENDPOINT = "http://cos.ap-guangzhou.myqcloud.com"; // Replace with your COS endpoint
-    private static final String REGION = "ap-guangzhou";
+    private static final String BUCKET_NAME = "bwaresolanatest-1322657745";
+    private static final String COS_ENDPOINT = "https://cos.ap-chengdu.myqcloud.com";
+    private static final String REGION = "ap-chengdu";
+    private static final String AWS_ID_KEY = "IKIDKWVM51sW5RhmgQzMbdS5XnqgR1Wr0ykT";
+    private static final String AWS_SECRET_KEY = "mUPKBsOoANTZVFn8IW0PzVp2Jqz3vb5M";
 
     private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
             .endpointOverride(URI.create(COS_ENDPOINT))
             .region(Region.of(REGION))
-//            .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY)))
+            .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(AWS_ID_KEY, AWS_SECRET_KEY)))
             .build();
     private static final S3TransferManager transferManager = S3TransferManager.builder()
             .s3Client(s3AsyncClient)
             .build();
-
-
-//    AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
-//            .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(
-//                    "http://cos.ap-guangzhou.myqcloud.com",
-//                    "ap-guangzhou"))
-//            .build();
-
 
 
     public static void write() {
@@ -64,27 +59,19 @@ public class GeyserPluginToCosWriter {
             hadoopConfig.setStrings("io.serializations", WritableSerialization.class.getName(), ResultSerialization.class.getName());
 
 
-//            Path entriesPath = new Path("file:///output/sequencefile/entries/entries.seq");
-//            final SequenceFile.Writer entriesWriter = createWriter(hadoopConfig, entriesPath);
-            S3OutputStream entriesStream = new S3OutputStream("sequencefile/entries/entries.seq");
+            CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream("sequencefile/entries/entries.seq");
             final SequenceFile.Writer entriesWriter = createWriter(hadoopConfig, entriesStream);
 
 
-//            Path blocksPath = new Path("file:///output/sequencefile/blocks/blocks.seq");
-//            final SequenceFile.Writer blocksWriter = createWriter(hadoopConfig, blocksPath);
-            S3OutputStream blocksStream = new S3OutputStream("sequencefile/blocks/blocks.seq");
+            CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream("sequencefile/blocks/blocks.seq");
             final SequenceFile.Writer blocksWriter = createWriter(hadoopConfig, blocksStream);
 
 
-//            Path txPath = new Path("file:///output/sequencefile/tx/tx.seq");
-//            final SequenceFile.Writer txWriter = createWriter(hadoopConfig, txPath);
-            S3OutputStream txStream = new S3OutputStream("sequencefile/tx/tx.seq");
+            CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream("sequencefile/tx/tx.seq");
             final SequenceFile.Writer txWriter = createWriter(hadoopConfig, txStream);
 
 
-//            Path txByAddrPath = new Path("file:///output/sequencefile/tx_by_addr/tx_by_addr.seq");
-//            final SequenceFile.Writer txByAddrWriter = createWriter(hadoopConfig, txByAddrPath);
-            S3OutputStream txByAddrStream = new S3OutputStream("sequencefile/tx_by_addr/tx_by_addr.seq");
+            CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream("sequencefile/tx_by_addr/tx_by_addr.seq");
             final SequenceFile.Writer txByAddrWriter = createWriter(hadoopConfig, txByAddrStream);
 
 
@@ -172,6 +159,7 @@ public class GeyserPluginToCosWriter {
 
             System.out.println("Finished writing sequence files to COS");
 
+            holdProgramForDebugging();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -185,30 +173,38 @@ public class GeyserPluginToCosWriter {
                 SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
     }
 
-    private static class S3OutputStream extends FSDataOutputStream {
+    private static void holdProgramForDebugging() {
+        System.out.println("Hold the program to observe the logs. Press Enter to exit.");
+        try {
+            // Using a scanner to wait for user input before exiting
+            Scanner scanner = new Scanner(System.in);
+            scanner.nextLine();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static class CustomS3FSDataOutputStream extends FSDataOutputStream {
         private final ByteArrayOutputStream buffer;
         private final String s3Key;
 
-        public S3OutputStream(String s3Key) {
-            super(null, null);
-            this.buffer = new ByteArrayOutputStream();
+        public CustomS3FSDataOutputStream(String s3Key) throws IOException {
+            // Use an internal ByteArrayOutputStream for buffering
+            this(new ByteArrayOutputStream(), s3Key);
+        }
+
+        private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, String s3Key) {
+            // Passing the ByteArrayOutputStream to the FSDataOutputStream's constructor
+            super(buffer, null);
+            this.buffer = buffer;
             this.s3Key = s3Key;
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) throws IOException {
-            buffer.write(b, off, len);
-        }
-
-        @Override
-        public void write(int b) throws IOException {
-            buffer.write(b);
         }
 
         @Override
         public void close() throws IOException {
             super.close();
             byte[] content = buffer.toByteArray();
+            System.out.println("Uploading " + s3Key + " to S3");
             CompletableFuture<CompletedUpload> uploadFuture = uploadToS3Async(s3Key, content);
 
             uploadFuture.whenComplete((completedUpload, throwable) -> {
@@ -220,7 +216,6 @@ public class GeyserPluginToCosWriter {
             });
             buffer.close();
         }
-
 
         private CompletableFuture<CompletedUpload> uploadToS3Async(String key, byte[] content) {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
