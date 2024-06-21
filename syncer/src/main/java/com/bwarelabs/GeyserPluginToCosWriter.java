@@ -14,14 +14,18 @@ import org.apache.hadoop.io.serializer.WritableSerialization;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 import software.amazon.awssdk.transfer.s3.model.UploadRequest;
 import software.amazon.awssdk.transfer.s3.model.Upload;
 import software.amazon.awssdk.transfer.s3.progress.LoggingTransferListener;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -39,17 +43,14 @@ public class GeyserPluginToCosWriter {
     private static final String AWS_ID_KEY = "IKIDKWVM51sW5RhmgQzMbdS5XnqgR1Wr0ykT";
     private static final String AWS_SECRET_KEY = "mUPKBsOoANTZVFn8IW0PzVp2Jqz3vb5M";
 
-    private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
+    private static final S3Client s3Client = S3Client.builder()
             .endpointOverride(URI.create(COS_ENDPOINT))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(AWS_ID_KEY, AWS_SECRET_KEY)))
             .build();
-    private static final S3TransferManager transferManager = S3TransferManager.builder()
-            .s3Client(s3AsyncClient)
-            .build();
-
 
     public static void write() {
+        System.out.println("Starting write process...");
         writeSequenceFileFromLocalFiles(java.nio.file.Paths.get("/input/storage"));
     }
 
@@ -60,19 +61,19 @@ public class GeyserPluginToCosWriter {
 
 
             CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream("sequencefile/entries/entries.seq");
-            final SequenceFile.Writer entriesWriter = createWriter(hadoopConfig, entriesStream);
+            final CustomSequenceFileWriter entriesWriter = createWriter(hadoopConfig, entriesStream);
 
 
             CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream("sequencefile/blocks/blocks.seq");
-            final SequenceFile.Writer blocksWriter = createWriter(hadoopConfig, blocksStream);
+            final CustomSequenceFileWriter blocksWriter = createWriter(hadoopConfig, blocksStream);
 
 
             CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream("sequencefile/tx/tx.seq");
-            final SequenceFile.Writer txWriter = createWriter(hadoopConfig, txStream);
+            final CustomSequenceFileWriter txWriter = createWriter(hadoopConfig, txStream);
 
 
             CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream("sequencefile/tx_by_addr/tx_by_addr.seq");
-            final SequenceFile.Writer txByAddrWriter = createWriter(hadoopConfig, txByAddrStream);
+            final CustomSequenceFileWriter txByAddrWriter = createWriter(hadoopConfig, txByAddrStream);
 
 
             Files.walkFileTree(inputDir, new SimpleFileVisitor<>() {
@@ -133,19 +134,19 @@ public class GeyserPluginToCosWriter {
                     switch (folderName) {
                         case "entries":
                             entriesWriter.append(key, result);
-                            System.out.println("Written to entries sequence file: " + filePath);
+//                            System.out.println("Written to entries sequence file: " + filePath);
                             break;
                         case "blocks":
                             blocksWriter.append(key, result);
-                            System.out.println("Written to blocks sequence file: " + filePath);
+//                            System.out.println("Written to blocks sequence file: " + filePath);
                             break;
                         case "tx":
                             txWriter.append(key, result);
-                            System.out.println("Written to tx sequence file: " + filePath);
+//                            System.out.println("Written to tx sequence file: " + filePath);
                             break;
                         case "tx_by_addr":
                             txByAddrWriter.append(key, result);
-                            System.out.println("Written to tx-by-addr sequence file: " + filePath);
+//                            System.out.println("Written to tx-by-addr sequence file: " + filePath);
                             break;
                     }
                     return FileVisitResult.CONTINUE;
@@ -165,12 +166,8 @@ public class GeyserPluginToCosWriter {
         }
     }
 
-    private static SequenceFile.Writer createWriter(Configuration conf, FSDataOutputStream outputStream) throws IOException {
-        return SequenceFile.createWriter(conf,
-                SequenceFile.Writer.stream(outputStream),
-                SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
-                SequenceFile.Writer.valueClass(Result.class),
-                SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+    private static CustomSequenceFileWriter createWriter(Configuration conf, FSDataOutputStream outputStream) throws IOException {
+        return new CustomSequenceFileWriter(conf, outputStream);
     }
 
     private static void holdProgramForDebugging() {
@@ -189,12 +186,11 @@ public class GeyserPluginToCosWriter {
         private final String s3Key;
 
         public CustomS3FSDataOutputStream(String s3Key) throws IOException {
-            // Use an internal ByteArrayOutputStream for buffering
             this(new ByteArrayOutputStream(), s3Key);
+            System.out.println("CustomS3FSDataOutputStream created for key: " + s3Key);
         }
 
         private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, String s3Key) {
-            // Passing the ByteArrayOutputStream to the FSDataOutputStream's constructor
             super(buffer, null);
             this.buffer = buffer;
             this.s3Key = s3Key;
@@ -202,35 +198,52 @@ public class GeyserPluginToCosWriter {
 
         @Override
         public void close() throws IOException {
+            System.out.println("Closing stream for: " + s3Key);
             super.close();
             byte[] content = buffer.toByteArray();
-            System.out.println("Uploading " + s3Key + " to S3");
-            CompletableFuture<CompletedUpload> uploadFuture = uploadToS3Async(s3Key, content);
+            System.out.println("Uploading " + s3Key + " to S3 synchronously");
 
-            uploadFuture.whenComplete((completedUpload, throwable) -> {
-                if (throwable != null) {
-                    throwable.printStackTrace();
-                } else {
-                    System.out.println("Successfully uploaded " + s3Key + " to S3");
-                }
-            });
-            buffer.close();
-        }
+            try {
+                PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                        .bucket(BUCKET_NAME)
+                        .key(s3Key)
+                        .build();
 
-        private CompletableFuture<CompletedUpload> uploadToS3Async(String key, byte[] content) {
-            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                    .bucket(BUCKET_NAME)
-                    .key(key)
-                    .build();
-
-            UploadRequest uploadRequest = UploadRequest.builder()
-                    .putObjectRequest(putObjectRequest)
-                    .requestBody(AsyncRequestBody.fromBytes(content))
-                    .addTransferListener(LoggingTransferListener.create())
-                    .build();
-
-            Upload upload = transferManager.upload(uploadRequest);
-            return upload.completionFuture();
+                s3Client.putObject(putObjectRequest, RequestBody.fromBytes(content));
+                System.out.println("Successfully uploaded " + s3Key + " to S3");
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Failed to upload " + s3Key + " to S3");
+            } finally {
+                buffer.close();
+            }
         }
     }
+
+    // Wrapper class for SequenceFile.Writer
+    private static class CustomSequenceFileWriter {
+        private final SequenceFile.Writer writer;
+        private final FSDataOutputStream fsDataOutputStream;
+
+        public CustomSequenceFileWriter(Configuration conf, FSDataOutputStream out) throws IOException {
+            this.fsDataOutputStream = out;
+            this.writer = SequenceFile.createWriter(conf,
+                    SequenceFile.Writer.stream(out),
+                    SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
+                    SequenceFile.Writer.valueClass(Result.class),
+                    SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+        }
+
+        public void append(ImmutableBytesWritable key, Result value) throws IOException {
+            writer.append(key, value);
+        }
+
+        public void close() throws IOException {
+            System.out.println("CustomSequenceFileWriter close called");
+            writer.close();
+            // for some reason, using fsDataOutputStream didn't call the close method of CustomS3FSDataOutputStream
+            fsDataOutputStream.close();
+        }
+    }
+
 }
