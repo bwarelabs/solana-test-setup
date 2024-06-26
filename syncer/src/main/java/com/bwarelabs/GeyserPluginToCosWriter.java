@@ -35,8 +35,8 @@ public class GeyserPluginToCosWriter {
     private static final String BUCKET_NAME = "bwaresolanatest-1322657745";
     private static final String COS_ENDPOINT = "http://cos.ap-chengdu.myqcloud.com";
     private static final String REGION = "ap-chengdu";
-    private static final String AWS_ID_KEY = "IKIDKWVM51sW5RhmgQzMbdS5XnqgR1Wr0ykT";
-    private static final String AWS_SECRET_KEY = "mUPKBsOoANTZVFn8IW0PzVp2Jqz3vb5M";
+    private static final String AWS_ID_KEY = "test";
+    private static final String AWS_SECRET_KEY = "test";
 
     private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
             .endpointOverride(URI.create(COS_ENDPOINT))
