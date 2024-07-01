@@ -48,8 +48,8 @@ public class App {
 
     if (readSource.equals("bigtable")) {
       System.out.println("Writing SequenceFiles from Bigtable tables.");
-      BigTableToSequenceFileWriter bigTableToSequenceFileWriter = new BigTableToSequenceFileWriter();
-      bigTableToSequenceFileWriter.write();
+      BigTableToCosWriter bigTableToCosWriter = new BigTableToCosWriter();
+      bigTableToCosWriter.write();
 
       System.out.println("Done!");
       return;

@@ -10,14 +10,17 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.serializer.WritableSerialization;
+import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.CompletableFuture;
 
-public class BigTableToSequenceFileWriter {
+public class BigTableToCosWriter {
     private final Connection connection;
 
-    public BigTableToSequenceFileWriter() {
+    public BigTableToCosWriter() {
         Configuration configuration = BigtableConfiguration.configure("emulator", "solana-ledger");
 
         connection = BigtableConfiguration.connect(configuration);
@@ -52,21 +55,19 @@ public class BigTableToSequenceFileWriter {
         fs.setConf(hadoopConfig);
         SequenceFile.Writer writer = null;
 
+        CustomS3FSDataOutputStream customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile"), tableName);
+
         try {
-            writer = SequenceFile.createWriter(hadoopConfig,
-                    SequenceFile.Writer.file(fs.makeQualified(path)),
-                    SequenceFile.Writer.keyClass(ImmutableBytesWritable.class),
-                    SequenceFile.Writer.valueClass(Result.class),
-                    SequenceFile.Writer.compression(SequenceFile.CompressionType.NONE));
+            CustomSequenceFileWriter customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream);
 
             Scan scan = new Scan();
             ResultScanner scanner = table.getScanner(scan);
 
             int numberOfRows = 0;
-            for (Result result: scanner) {
+            for (Result result : scanner) {
                 numberOfRows++;
                 ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
-                writer.append(rowKey, result);
+                customWriter.append(rowKey, result);
 
                 String checksum = null;
                 try {
@@ -79,15 +80,17 @@ public class BigTableToSequenceFileWriter {
 
             System.out.println("Number of rows written: " + numberOfRows);
 
-        } finally
-
-        {
+        } finally {
             if (writer != null) {
                 System.out.println("Closing writer...");
                 writer.close();
             }
             table.close();
         }
-    }
 
+        customFSDataOutputStream.close();
+        CompletableFuture<CompletedUpload> uploadFuture = customFSDataOutputStream.getUploadFuture();
+        uploadFuture.join();
+        System.out.println("Successfully uploaded " + customFSDataOutputStream.getS3Key() + " to COS");
+    }
 }
