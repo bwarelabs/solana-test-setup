@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
@@ -26,8 +27,10 @@ public class BigTableToCosWriter {
 
     private final Connection connection;
     private final ExecutorService executorService;
+    private final Semaphore batchSemaphore;
     private static final int THREAD_COUNT = 16;
     private static final int ROWS_PER_THREAD = 100;
+    private static final int MAX_CONCURRENT_BATCHES = 10;
 
     public BigTableToCosWriter() {
         try {
@@ -40,15 +43,18 @@ public class BigTableToCosWriter {
         Configuration configuration = BigtableConfiguration.configure("emulator", "solana-ledger");
         connection = BigtableConfiguration.connect(configuration);
         executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+        batchSemaphore = new Semaphore(MAX_CONCURRENT_BATCHES);
     }
 
     public void write() {
+        logger.info("Starting BigTable to COS writer");
         List<String> tables = List.of("blocks", "entries", "tx", "tx-by-addr");
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (String table : tables) {
             try {
                 futures.addAll(processTable(table));
+                logger.info("Processing table: " + table);
             } catch (IOException e) {
                 logger.log(Level.SEVERE, "Error processing table: " + table, e);
             }
@@ -92,13 +98,16 @@ public class BigTableToCosWriter {
     private CompletableFuture<Void> submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
         return CompletableFuture.runAsync(() -> {
             try {
+                batchSemaphore.acquire();
                 writeBatchToCos(tableName, startRow, endRow, batch)
                         .exceptionally(ex -> {
                             logger.log(Level.SEVERE, "Error writing batch to COS", ex);
                             return null;
-                        });
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "Exception in submitBatch", e);
+                        })
+                        .whenComplete((v, ex) -> batchSemaphore.release());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.log(Level.SEVERE, "Batch processing interrupted", e);
             }
         }, executorService);
     }
