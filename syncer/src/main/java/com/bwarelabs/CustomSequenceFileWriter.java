@@ -8,7 +8,7 @@ import org.apache.hadoop.io.SequenceFile;
 
 import java.io.IOException;
 
-public class CustomSequenceFileWriter {
+public class CustomSequenceFileWriter implements AutoCloseable {
     private final SequenceFile.Writer writer;
     private final FSDataOutputStream fsDataOutputStream;
 
@@ -25,6 +25,7 @@ public class CustomSequenceFileWriter {
         this.writer.append(key, value);
     }
 
+    @Override
     public void close() throws IOException {
         System.out.println("Closing custom sequence file writer");
         this.writer.close();
