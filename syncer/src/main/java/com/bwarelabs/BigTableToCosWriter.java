@@ -12,10 +12,11 @@ import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class BigTableToCosWriter {
     private final Connection connection;
@@ -79,16 +80,19 @@ public class BigTableToCosWriter {
     private CompletableFuture<Void> submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
         return CompletableFuture.runAsync(() -> {
             try {
-                writeBatchToCos(tableName, startRow, endRow, batch);
-            } catch (IOException e) {
+                writeBatchToCos(tableName, startRow, endRow, batch)
+                        .exceptionally(ex -> {
+                            ex.printStackTrace();
+                            return null;
+                        }).join();
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }, executorService);
     }
 
-    private void writeBatchToCos(String tableName, int startRow, int endRow, List<Result> batch) throws IOException {
+    private CompletableFuture<Void> writeBatchToCos(String tableName, int startRow, int endRow, List<Result> batch) {
         System.out.println("[" + Thread.currentThread().getName() + "] Writing batch for " + tableName + " from " + startRow + " to " + endRow);
-
 
         Configuration hadoopConfig = new Configuration();
         hadoopConfig.setStrings(
@@ -96,21 +100,37 @@ public class BigTableToCosWriter {
                 ResultSerialization.class.getName(),
                 WritableSerialization.class.getName());
 
-
         RawLocalFileSystem fs = new RawLocalFileSystem();
         fs.setConf(hadoopConfig);
-        CustomS3FSDataOutputStream customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile/" + tableName + "/range_" + startRow + "_" + endRow), tableName);
+        CustomS3FSDataOutputStream customFSDataOutputStream;
+        try {
+            customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile/" + tableName + "/range_" + startRow + "_" + endRow), tableName);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return CompletableFuture.failedFuture(e);
+        }
 
         try (CustomSequenceFileWriter customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream)) {
             for (Result result : batch) {
                 ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
                 customWriter.append(rowKey, result);
             }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return CompletableFuture.failedFuture(e);
         }
 
-        customFSDataOutputStream.close();
+        try {
+            customFSDataOutputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return CompletableFuture.failedFuture(e);
+        }
+
         CompletableFuture<CompletedUpload> uploadFuture = customFSDataOutputStream.getUploadFuture();
-        uploadFuture.join();
-        System.out.println("[" + Thread.currentThread().getName() + "] Successfully uploaded " + customFSDataOutputStream.getS3Key() + " to COS");
+
+        return uploadFuture.thenAccept(completedUpload -> {
+            System.out.println("[" + Thread.currentThread().getName() + "] Successfully uploaded " + customFSDataOutputStream.getS3Key() + " to COS");
+        });
     }
 }
