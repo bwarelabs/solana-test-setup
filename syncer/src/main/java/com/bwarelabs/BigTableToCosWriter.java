@@ -29,8 +29,8 @@ public class BigTableToCosWriter {
     private final ExecutorService executorService;
     private final Semaphore batchSemaphore;
     private static final int THREAD_COUNT = 16;
-    private static final int ROWS_PER_THREAD = 100;
-    private static final int MAX_CONCURRENT_BATCHES = 10;
+    private static final int ROWS_PER_THREAD = 1500;
+    private static final int MAX_CONCURRENT_BATCHES = 100;
 
     public BigTableToCosWriter() {
         try {

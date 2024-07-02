@@ -3,8 +3,10 @@ package com.bwarelabs;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 import software.amazon.awssdk.transfer.s3.model.Upload;
@@ -13,6 +15,7 @@ import software.amazon.awssdk.transfer.s3.progress.LoggingTransferListener;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 public class CosUtils {
@@ -22,7 +25,14 @@ public class CosUtils {
     private static final String AWS_ID_KEY = "test";
     private static final String AWS_SECRET_KEY = "test";
 
+    private static final SdkAsyncHttpClient httpClient = NettyNioAsyncHttpClient
+            .builder()
+            .maxConcurrency(200)
+            .connectionAcquisitionTimeout(Duration.ofSeconds(10))
+            .build();
+
     private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
+            .httpClient(httpClient)
             .endpointOverride(URI.create(COS_ENDPOINT))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(AWS_ID_KEY, AWS_SECRET_KEY)))
