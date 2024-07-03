@@ -67,10 +67,10 @@ public class BigTableToCosWriter {
         }
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
-        allUploads.thenRun(() -> logger.info("All tables processed and uploaded."))
-                .join();
+        allUploads.join();
 
         executorService.shutdown();
+        logger.info("All tables processed and uploaded.");
     }
 
     private void processTable(String tableName) throws IOException {
@@ -91,39 +91,40 @@ public class BigTableToCosWriter {
             batch.add(result);
             if (batch.size() == ROWS_PER_THREAD) {
                 int endRow = startRow + ROWS_PER_THREAD;
-                allUploadFutures.add(submitBatch(tableName, startRow, endRow, new ArrayList<>(batch)));
+                submitBatch(tableName, startRow, endRow, new ArrayList<>(batch));
                 batch.clear();
                 startRow = endRow;
             }
         }
         if (!batch.isEmpty()) {
             int endRow = startRow + batch.size();
-            allUploadFutures.add(submitBatch(tableName, startRow, endRow, batch));
+            submitBatch(tableName, startRow, endRow, batch);
         }
 
         table.close();
     }
 
-    private CompletableFuture<Void> submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
-        return CompletableFuture.runAsync(() -> {
+    private void submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
             try {
                 batchSemaphore.acquire();
-                writeBatchToCos(tableName, startRow, endRow, batch)
-                        .exceptionally(ex -> {
-                            logger.log(Level.SEVERE, "Error writing batch to COS", ex);
-                            return null;
-                        })
-                        .whenComplete((v, ex) -> {
-                            batchSemaphore.release();
-                            if (ex == null) {
-                                updateCheckpoint(tableName, batch.get(batch.size() - 1).getRow());
-                            }
-                        }).join(); // Wait for the upload to complete
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.log(Level.SEVERE, "Batch processing interrupted", e);
             }
-        }, executorService);
+        }, executorService).thenCompose(v ->
+                writeBatchToCos(tableName, startRow, endRow, batch)
+                        .whenComplete((result, ex) -> {
+                            batchSemaphore.release();
+                            if (ex == null) {
+                                updateCheckpoint(tableName, batch.get(batch.size() - 1).getRow());
+                            } else {
+                                logger.log(Level.SEVERE, "Error writing batch to COS", ex);
+                            }
+                        })
+        );
+
+        allUploadFutures.add(future);
     }
 
     private CompletableFuture<Void> writeBatchToCos(String tableName, int startRow, int endRow, List<Result> batch) {
@@ -165,7 +166,7 @@ public class BigTableToCosWriter {
         CompletableFuture<CompletedUpload> uploadFuture = customFSDataOutputStream.getUploadFuture();
         return uploadFuture.thenAccept(completedUpload -> {
             logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-        });
+        }).thenRun(() -> {});
     }
 
     private void updateCheckpoint(String tableName, byte[] lastProcessedRow) {
