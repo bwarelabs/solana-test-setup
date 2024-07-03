@@ -7,13 +7,16 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 
 import java.io.IOException;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,6 +35,8 @@ public class BigTableToCosWriter {
     private static final int ROWS_PER_THREAD = 1500;
     private static final int MAX_CONCURRENT_BATCHES = 100;
     private final List<CompletableFuture<Void>> allUploadFutures = new ArrayList<>();
+    private final Map<String, String> checkpoints = new HashMap<>();
+    private static final String CHECKPOINT_FILE = "checkpoints.txt";
 
     public BigTableToCosWriter() {
         try {
@@ -45,6 +50,7 @@ public class BigTableToCosWriter {
         connection = BigtableConfiguration.connect(configuration);
         executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         batchSemaphore = new Semaphore(MAX_CONCURRENT_BATCHES);
+        loadCheckpoints();
     }
 
     public void write() {
@@ -72,6 +78,11 @@ public class BigTableToCosWriter {
 
         Scan scan = new Scan();
         scan.setCaching(ROWS_PER_THREAD);
+
+        if (checkpoints.containsKey(tableName)) {
+            scan.withStartRow(Bytes.toBytes(checkpoints.get(tableName)));
+        }
+
         ResultScanner scanner = table.getScanner(scan);
 
         int startRow = 0;
@@ -80,21 +91,21 @@ public class BigTableToCosWriter {
             batch.add(result);
             if (batch.size() == ROWS_PER_THREAD) {
                 int endRow = startRow + ROWS_PER_THREAD;
-                submitBatch(tableName, startRow, endRow, new ArrayList<>(batch));
+                allUploadFutures.add(submitBatch(tableName, startRow, endRow, new ArrayList<>(batch)));
                 batch.clear();
                 startRow = endRow;
             }
         }
         if (!batch.isEmpty()) {
             int endRow = startRow + batch.size();
-            submitBatch(tableName, startRow, endRow, batch);
+            allUploadFutures.add(submitBatch(tableName, startRow, endRow, batch));
         }
 
         table.close();
     }
 
-    private void submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
-        CompletableFuture.runAsync(() -> {
+    private CompletableFuture<Void> submitBatch(String tableName, int startRow, int endRow, List<Result> batch) {
+        return CompletableFuture.runAsync(() -> {
             try {
                 batchSemaphore.acquire();
                 writeBatchToCos(tableName, startRow, endRow, batch)
@@ -102,7 +113,12 @@ public class BigTableToCosWriter {
                             logger.log(Level.SEVERE, "Error writing batch to COS", ex);
                             return null;
                         })
-                        .whenComplete((v, ex) -> batchSemaphore.release());
+                        .whenComplete((v, ex) -> {
+                            batchSemaphore.release();
+                            if (ex == null) {
+                                updateCheckpoint(tableName, batch.get(batch.size() - 1).getRow());
+                            }
+                        }).join(); // Wait for the upload to complete
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.log(Level.SEVERE, "Batch processing interrupted", e);
@@ -147,10 +163,42 @@ public class BigTableToCosWriter {
         }
 
         CompletableFuture<CompletedUpload> uploadFuture = customFSDataOutputStream.getUploadFuture();
-        allUploadFutures.add(uploadFuture.thenAccept(completedUpload -> {
+        return uploadFuture.thenAccept(completedUpload -> {
             logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-        }));
+        });
+    }
 
-        return uploadFuture.thenAccept(completedUpload -> {});
+    private void updateCheckpoint(String tableName, byte[] lastProcessedRow) {
+        checkpoints.put(tableName, Bytes.toString(lastProcessedRow));
+        saveCheckpoints();
+    }
+
+    private void saveCheckpoints() {
+        try {
+            List<String> lines = new ArrayList<>();
+            for (Map.Entry<String, String> entry : checkpoints.entrySet()) {
+                lines.add(entry.getKey() + "=" + entry.getValue());
+            }
+            Files.write(Paths.get(CHECKPOINT_FILE), lines);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "Error saving checkpoints", e);
+        }
+    }
+
+    private void loadCheckpoints() {
+        try {
+            Path checkpointPath = Paths.get(CHECKPOINT_FILE);
+            if (Files.exists(checkpointPath)) {
+                List<String> lines = Files.readAllLines(checkpointPath);
+                for (String line : lines) {
+                    String[] parts = line.split("=");
+                    if (parts.length == 2) {
+                        checkpoints.put(parts[0], parts[1]);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "Error loading checkpoints", e);
+        }
     }
 }
