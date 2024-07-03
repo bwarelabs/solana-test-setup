@@ -138,7 +138,15 @@ public class GeyserPluginToCosWriter {
                     blocksStream.getUploadFuture(),
                     txStream.getUploadFuture(),
                     txByAddrStream.getUploadFuture()
-            ).thenRun(() -> System.out.println("Slot range processed: " + slotRangeDir.getFileName()));
+            ).thenRun(() -> {
+                System.out.println("Slot range processed: " + slotRangeDir.getFileName());
+                try {
+                    deleteDirectory(slotRangeDir);
+                    System.out.println("Deleted slot range: " + slotRangeDir.getFileName());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
         } catch (IOException e) {
             e.printStackTrace();
             return CompletableFuture.completedFuture(null);
@@ -211,6 +219,22 @@ public class GeyserPluginToCosWriter {
                         txByAddrWriter.append(key, result);
                         break;
                 }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static void deleteDirectory(Path path) throws IOException {
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                Files.delete(dir);
                 return FileVisitResult.CONTINUE;
             }
         });
