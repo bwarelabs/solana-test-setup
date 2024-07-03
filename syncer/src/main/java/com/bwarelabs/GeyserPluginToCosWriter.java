@@ -36,15 +36,58 @@ import java.util.stream.Collectors;
  *   before the program exits.
  */
 public class GeyserPluginToCosWriter {
-    public static void write() {
-        System.out.println("Starting write process...");
+
+    public static void watchDirectory(Path path) {
+        System.out.println("Starting watch process...");
 
         try {
-            // List slot range directories
-            List<CompletableFuture<Void>> futures = Files.list(Paths.get("/input/storage"))
+            // Process existing directories
+            List<CompletableFuture<Void>> futures = Files.list(path)
                     .filter(Files::isDirectory)
                     .map(GeyserPluginToCosWriter::processSlotRange)
                     .collect(Collectors.toList());
+
+            CompletableFuture<Void> initialUploads = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+            initialUploads.thenRun(() -> System.out.println("Initial slot ranges processed and uploaded."));
+
+            // Start watching the directory for new subdirectories
+            try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
+                path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+
+                System.out.println("Watching directory: " + path);
+
+                while (true) {
+                    WatchKey key;
+                    try {
+                        key = watchService.take();
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+
+                    for (WatchEvent<?> event : key.pollEvents()) {
+                        WatchEvent.Kind<?> kind = event.kind();
+
+                        if (kind == StandardWatchEventKinds.OVERFLOW) {
+                            continue;
+                        }
+
+                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
+                        Path fileName = ev.context();
+                        Path child = path.resolve(fileName);
+
+                        if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
+                            CompletableFuture<Void> future = processSlotRange(child);
+                            futures.add(future);
+                        }
+                    }
+
+                    boolean valid = key.reset();
+                    if (!valid) {
+                        break;
+                    }
+                }
+            }
 
             CompletableFuture<Void> allUploads = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
             allUploads.thenRun(() -> System.out.println("All slot ranges processed and uploaded."))

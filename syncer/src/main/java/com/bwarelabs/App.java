@@ -7,6 +7,8 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Result;
+
+import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 
 import java.io.IOException;
@@ -58,7 +60,7 @@ public class App {
     if (readSource.equals("local-files")) {
       System.out.println("Reading data from local files from path '/input/storage'");
 
-      GeyserPluginToCosWriter.write();
+      GeyserPluginToCosWriter.watchDirectory(Path.of("/input/storage"));
 
       System.out.println("Done!");
       return;
