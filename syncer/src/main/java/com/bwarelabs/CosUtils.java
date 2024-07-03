@@ -28,7 +28,7 @@ public class CosUtils {
     private static final SdkAsyncHttpClient httpClient = NettyNioAsyncHttpClient
             .builder()
             .maxConcurrency(200)
-            .connectionAcquisitionTimeout(Duration.ofSeconds(10))
+            .connectionAcquisitionTimeout(Duration.ofSeconds(60))
             .build();
 
     private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
