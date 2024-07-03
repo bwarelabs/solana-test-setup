@@ -119,10 +119,6 @@ public class GeyserPluginToCosWriter {
                         fileName;
 
                 if (folderName.equals("tx_by_addr")) {
-                    if (fileName.startsWith("Vote")) {
-                        System.out.println("Skipping file: " + fileName);
-                        return FileVisitResult.CONTINUE;
-                    }
                     rowKeyWithoutExtension = rowKeyWithoutExtension.replace("_", "/");
                 }
 
