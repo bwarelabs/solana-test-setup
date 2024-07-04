@@ -79,13 +79,18 @@ public class BigTableToCosWriter {
         Scan scan = new Scan();
         scan.setCaching(ROWS_PER_THREAD);
 
+        int startRow = 0;
+
         if (checkpoints.containsKey(tableName)) {
-            scan.withStartRow(Bytes.toBytes(checkpoints.get(tableName)));
+            String startRowKey = checkpoints.get(tableName);
+            scan.withStartRow(Bytes.toBytes(startRowKey));
+            if (tableName.equals("blocks") || tableName.equals("entries")) {
+                startRow = getRowNumberFromKey(startRowKey);
+            }
         }
 
         ResultScanner scanner = table.getScanner(scan);
 
-        int startRow = 0;
         List<Result> batch = new ArrayList<>(ROWS_PER_THREAD);
         for (Result result : scanner) {
             batch.add(result);
@@ -128,7 +133,7 @@ public class BigTableToCosWriter {
     }
 
     private CompletableFuture<Void> writeBatchToCos(String tableName, int startRow, int endRow, List<Result> batch) {
-        logger.info(String.format("[%s] Writing batch for %s from %d to %d", Thread.currentThread().getName(), tableName, startRow, endRow));
+        logger.info(String.format("[%s] Converting batch to sequencefile format for %s from %d to %d", Thread.currentThread().getName(), tableName, startRow, endRow));
 
         Configuration hadoopConfig = new Configuration();
         hadoopConfig.setStrings(
@@ -165,7 +170,7 @@ public class BigTableToCosWriter {
 
         CompletableFuture<CompletedUpload> uploadFuture = customFSDataOutputStream.getUploadFuture();
         return uploadFuture.thenAccept(completedUpload -> {
-            logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
+            logger.info(String.format("[%s] Successfully queued %s upload to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
         }).thenRun(() -> {});
     }
 
@@ -200,6 +205,15 @@ public class BigTableToCosWriter {
             }
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Error loading checkpoints", e);
+        }
+    }
+
+    private int getRowNumberFromKey(String rowKey) {
+        try {
+            return Integer.parseInt(rowKey, 16);
+        } catch (NumberFormatException e) {
+            logger.log(Level.WARNING, "Invalid row key format: " + rowKey, e);
+            return 0;
         }
     }
 }
