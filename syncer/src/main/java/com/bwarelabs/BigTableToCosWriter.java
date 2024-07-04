@@ -31,7 +31,8 @@ public class BigTableToCosWriter {
     private final Connection connection;
     private final ExecutorService executorService;
     private static final int THREAD_COUNT = 2;
-    private static final int SUBRANGE_SIZE = 4;
+    private static final int SUBRANGE_SIZE = 4; // Number of rows to process in each batch within a thread range
+    private static final int BATCH_LIMIT = 5;  // Limit the number of chained batches
     private final List<CompletableFuture<Void>> allUploadFutures = new ArrayList<>();
     private final Map<Integer, String> checkpoints = new HashMap<>();
 
@@ -81,27 +82,36 @@ public class BigTableToCosWriter {
         CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
             try {
                 String currentStartRow = startRowKey;
-                CompletableFuture<Void> previousUpload = CompletableFuture.completedFuture(null);
+                List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
 
                 while (compareKeys(currentStartRow, endRowKey) <= 0) {
-                    String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
-                    List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
+                    for (int i = 0; i < BATCH_LIMIT && compareKeys(currentStartRow, endRowKey) <= 0; i++) {
+                        String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
+                        List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
 
-                    CustomS3FSDataOutputStream customFSDataOutputStream = convertToSequenceFile(tableName, currentStartRow, currentEndRow, batch);
+                        CustomS3FSDataOutputStream customFSDataOutputStream = convertToSequenceFile(tableName, currentStartRow, currentEndRow, batch);
 
-                    previousUpload = previousUpload.thenCompose(v ->
-                            customFSDataOutputStream.getUploadFuture()
-                                    .thenRun(() -> {
-                                        logger.info(String.format("[%s] Successfully uploaded %s to COS",
-                                                Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-                                        updateCheckpoint(threadId, currentEndRow);
-                                    })
-                    );
+                        final String startRowForLogging = currentStartRow;
+                        final String endRowForLogging = currentEndRow;
+                        System.out.println(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), startRowForLogging, endRowForLogging));
 
-                    currentStartRow = incrementRowKey(currentEndRow);
+                        CompletableFuture<Void> uploadFuture = customFSDataOutputStream.getUploadFuture()
+                                .thenRun(() -> {
+                                    System.out.println(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
+                                });
+
+                        batchFutures.add(uploadFuture);
+
+                        currentStartRow = incrementRowKey(currentEndRow);
+                    }
+
+                    CompletableFuture<Void> currentBatch = CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
+                    currentBatch.join();
+
+                    updateCheckpoint(threadId, currentStartRow);
+
+                    batchFutures.clear();
                 }
-
-                previousUpload.join();
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Error processing table range for " + tableName, e);
             }
