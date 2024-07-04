@@ -30,11 +30,10 @@ public class BigTableToCosWriter {
 
     private final Connection connection;
     private final ExecutorService executorService;
-    private static final int THREAD_COUNT = 16;
-    private static final int SUBRANGE_SIZE = 100;
+    private static final int THREAD_COUNT = 2;
+    private static final int SUBRANGE_SIZE = 4;
     private final List<CompletableFuture<Void>> allUploadFutures = new ArrayList<>();
-    private final Map<String, String> checkpoints = new HashMap<>();
-    private static final String CHECKPOINT_FILE = "checkpoints.txt";
+    private final Map<Integer, String> checkpoints = new HashMap<>();
 
     public BigTableToCosWriter() {
         try {
@@ -56,7 +55,6 @@ public class BigTableToCosWriter {
         List<String[]> hexRanges = splitHexRange();
         List<String[]> txRanges = splitRangeTx();
 
-//        List<String> tables = List.of("blocks", "entries", "tx", "tx-by-addr");
         List<String> tables = List.of("blocks");
 
         for (int i = 0; i < THREAD_COUNT; i++) {
@@ -64,11 +62,11 @@ public class BigTableToCosWriter {
             String[] txRange = txRanges.get(i);
 
             for (String table : tables) {
-                String startRow = checkpoints.getOrDefault(table, table.equals("tx") || table.equals("tx-by-addr") ? txRange[0] : hexRange[0]);
+                String startRow = checkpoints.getOrDefault(i, table.equals("tx") || table.equals("tx-by-addr") ? txRange[0] : hexRange[0]);
                 String endRow = table.equals("tx") || table.equals("tx-by-addr") ? txRange[1] : hexRange[1];
 
                 logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
-                processTableRange(table, startRow, endRow);
+                processTableRange(i, table, startRow, endRow);
             }
         }
 
@@ -79,7 +77,7 @@ public class BigTableToCosWriter {
         logger.info("All tables processed and uploaded.");
     }
 
-    private void processTableRange(String tableName, String startRowKey, String endRowKey) {
+    private void processTableRange(int threadId, String tableName, String startRowKey, String endRowKey) {
         CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
             try {
                 String currentStartRow = startRowKey;
@@ -96,7 +94,7 @@ public class BigTableToCosWriter {
                                     .thenRun(() -> {
                                         logger.info(String.format("[%s] Successfully uploaded %s to COS",
                                                 Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-                                        updateCheckpoint(tableName, currentEndRow);
+                                        updateCheckpoint(threadId, currentEndRow);
                                     })
                     );
 
@@ -147,7 +145,7 @@ public class BigTableToCosWriter {
         return batch;
     }
 
-    private CustomS3FSDataOutputStream  convertToSequenceFile(String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
+    private CustomS3FSDataOutputStream convertToSequenceFile(String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
         logger.info(String.format("[%s] Converting batch to sequencefile format for %s from %s to %s", Thread.currentThread().getName(), tableName, startRowKey, endRowKey));
 
         Configuration hadoopConfig = new Configuration();
@@ -162,47 +160,40 @@ public class BigTableToCosWriter {
 
         CustomSequenceFileWriter customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream);
 
-            for (Result result : batch) {
-                ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
-                customWriter.append(rowKey, result);
-            }
+        for (Result result : batch) {
+            ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
+            customWriter.append(rowKey, result);
+        }
 
         customWriter.close();
 
         return customFSDataOutputStream;
     }
 
-    private void updateCheckpoint(String tableName, String endRowKey) {
-        checkpoints.put(tableName, endRowKey);
-        saveCheckpoints();
+    private void updateCheckpoint(int threadId, String endRowKey) {
+        checkpoints.put(threadId, endRowKey);
+        saveCheckpoint(threadId, endRowKey);
     }
 
-    private void saveCheckpoints() {
+    private void saveCheckpoint(int threadId, String endRowKey) {
         try {
-            List<String> lines = new ArrayList<>();
-            for (Map.Entry<String, String> entry : checkpoints.entrySet()) {
-                lines.add(entry.getKey() + "=" + entry.getValue());
-            }
-            Files.write(Paths.get(CHECKPOINT_FILE), lines);
+            Files.write(Paths.get("checkpoint_" + threadId + ".txt"), endRowKey.getBytes());
         } catch (IOException e) {
-            logger.log(Level.SEVERE, "Error saving checkpoints", e);
+            logger.log(Level.SEVERE, "Error saving checkpoint for thread " + threadId, e);
         }
     }
 
     private void loadCheckpoints() {
-        try {
-            Path checkpointPath = Paths.get(CHECKPOINT_FILE);
+        for (int i = 0; i < THREAD_COUNT; i++) {
+            Path checkpointPath = Paths.get("checkpoint_" + i + ".txt");
             if (Files.exists(checkpointPath)) {
-                List<String> lines = Files.readAllLines(checkpointPath);
-                for (String line : lines) {
-                    String[] parts = line.split("=");
-                    if (parts.length == 2) {
-                        checkpoints.put(parts[0], parts[1]);
-                    }
+                try {
+                    String checkpoint = new String(Files.readAllBytes(checkpointPath));
+                    checkpoints.put(i, checkpoint);
+                } catch (IOException e) {
+                    logger.log(Level.SEVERE, "Error loading checkpoint for thread " + i, e);
                 }
             }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Error loading checkpoints", e);
         }
     }
 
@@ -241,7 +232,6 @@ public class BigTableToCosWriter {
         return String.format("%016x", value);
     }
 
-
     private List<String[]> splitRangeTx() {
         // Custom logic to split non-hex keys, e.g., by using the hash or other criteria.
         // This example assumes keys are split based on their hash values.
@@ -249,10 +239,10 @@ public class BigTableToCosWriter {
         // Assuming we can get some min and max hash values for tx keys
         long start = 0; // Replace with actual start if known
         long end = Long.MAX_VALUE; // Replace with actual end if known
-        long rangeSize = (end - start) / BigTableToCosWriter.THREAD_COUNT;
-        for (int i = 0; i < BigTableToCosWriter.THREAD_COUNT; i++) {
+        long rangeSize = (end - start) / THREAD_COUNT;
+        for (int i = 0; i < THREAD_COUNT; i++) {
             long rangeStart = start + i * rangeSize;
-            long rangeEnd = (i == BigTableToCosWriter.THREAD_COUNT - 1) ? end : rangeStart + rangeSize - 1;
+            long rangeEnd = (i == THREAD_COUNT - 1) ? end : rangeStart + rangeSize - 1;
             ranges.add(new String[]{Long.toString(rangeStart), Long.toString(rangeEnd)});
         }
         return ranges;
