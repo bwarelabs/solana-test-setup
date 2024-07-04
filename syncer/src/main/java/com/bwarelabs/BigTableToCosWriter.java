@@ -146,7 +146,7 @@ public class BigTableToCosWriter {
         CustomS3FSDataOutputStream customFSDataOutputStream;
         try {
             customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile/" + tableName + "/range_" + startRow + "_" + endRow), tableName);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.log(Level.SEVERE, "Error creating CustomS3FSDataOutputStream", e);
             return CompletableFuture.failedFuture(e);
         }
@@ -156,7 +156,7 @@ public class BigTableToCosWriter {
                 ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
                 customWriter.append(rowKey, result);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.log(Level.SEVERE, "Error writing batch to CustomSequenceFileWriter", e);
             return CompletableFuture.failedFuture(e);
         }

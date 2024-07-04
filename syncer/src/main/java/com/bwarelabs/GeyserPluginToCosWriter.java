@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 /**
@@ -101,24 +102,25 @@ public class GeyserPluginToCosWriter {
     private static CompletableFuture<Void> processSlotRange(Path slotRangeDir) {
         System.out.println("Processing slot range: " + slotRangeDir.getFileName());
 
-        try {
-            Configuration hadoopConfig = new Configuration();
-            hadoopConfig.setStrings("io.serializations", WritableSerialization.class.getName(), ResultSerialization.class.getName());
+        Configuration hadoopConfig = new Configuration();
+        hadoopConfig.setStrings("io.serializations", WritableSerialization.class.getName(), ResultSerialization.class.getName());
 
-            // Create writers for each category within this slot range
-            CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream(slotRangeDir, "entries");
-            CustomSequenceFileWriter entriesWriter = new CustomSequenceFileWriter(hadoopConfig, entriesStream);
+        try (
+                CustomS3FSDataOutputStream entriesStream = new CustomS3FSDataOutputStream(slotRangeDir, "entries");
+                CustomSequenceFileWriter entriesWriter = new CustomSequenceFileWriter(hadoopConfig, entriesStream);
 
-            CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream(slotRangeDir, "blocks");
-            CustomSequenceFileWriter blocksWriter = new CustomSequenceFileWriter(hadoopConfig, blocksStream);
+                CustomS3FSDataOutputStream blocksStream = new CustomS3FSDataOutputStream(slotRangeDir, "blocks");
+                CustomSequenceFileWriter blocksWriter = new CustomSequenceFileWriter(hadoopConfig, blocksStream);
 
-            CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx");
-            CustomSequenceFileWriter txWriter = new CustomSequenceFileWriter(hadoopConfig, txStream);
+                CustomS3FSDataOutputStream txStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx");
+                CustomSequenceFileWriter txWriter = new CustomSequenceFileWriter(hadoopConfig, txStream);
 
-            CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx_by_addr");
-            CustomSequenceFileWriter txByAddrWriter = new CustomSequenceFileWriter(hadoopConfig, txByAddrStream);
+                CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx_by_addr");
+                CustomSequenceFileWriter txByAddrWriter = new CustomSequenceFileWriter(hadoopConfig, txByAddrStream);
 
-            Files.list(slotRangeDir)
+                Stream<Path>slotDirs = Files.list(slotRangeDir)
+        ) {
+            slotDirs
                     .filter(Files::isDirectory)
                     .forEach(slotDir -> {
                         try {
@@ -128,6 +130,7 @@ public class GeyserPluginToCosWriter {
                         }
                     });
 
+            // Closing writers so the CustomS3FSDataOutputStream creates the futures
             entriesWriter.close();
             blocksWriter.close();
             txWriter.close();
