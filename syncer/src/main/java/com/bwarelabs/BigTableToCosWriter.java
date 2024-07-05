@@ -9,7 +9,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.serializer.WritableSerialization;
-import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -56,6 +55,11 @@ public class BigTableToCosWriter {
         List<String[]> hexRanges = splitHexRange();
         List<String[]> txRanges = splitRangeTx();
 
+        if (hexRanges.size() != THREAD_COUNT || txRanges.size() != THREAD_COUNT) {
+            logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
+            return;
+        }
+
         // todo - add the rest of the tables
         List<String> tables = List.of("blocks");
 
@@ -89,9 +93,11 @@ public class BigTableToCosWriter {
                     for (int i = 0; i < BATCH_LIMIT && compareKeys(currentStartRow, endRowKey) <= 0; i++) {
                         String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
                         List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
+                        logger.info(String.format("[%s] bath size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, currentEndRow));
 
                         CompletableFuture<Void> uploadFuture = null;
-                        try (CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch)) {
+                        try {
+                            CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
 
                             logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
 
@@ -144,16 +150,26 @@ public class BigTableToCosWriter {
 
     private List<Result> fetchBatch(String tableName, String startRowKey, String endRowKey) throws IOException {
         Table table = connection.getTable(TableName.valueOf(tableName));
-        Scan scan = new Scan();
-        scan.withStartRow(Bytes.toBytes(startRowKey));
-        scan.withStopRow(Bytes.toBytes(endRowKey));
-        scan.setCaching(SUBRANGE_SIZE);
+        List<Result> batch = new ArrayList<>();
 
-        ResultScanner scanner = table.getScanner(scan);
-        List<Result> batch = new ArrayList<>(SUBRANGE_SIZE);
+        if (startRowKey.equals(endRowKey)) {
+            logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
+            Get get = new Get(Bytes.toBytes(startRowKey));
+            Result result = table.get(get);
+            if (!result.isEmpty()) {
+                batch.add(result);
+            }
+        } else {
+            Scan scan = new Scan();
+            scan.withStartRow(Bytes.toBytes(startRowKey));
+            scan.withStopRow(Bytes.toBytes(endRowKey));
+            scan.setCaching(SUBRANGE_SIZE);
 
-        for (Result result : scanner) {
-            batch.add(result);
+            ResultScanner scanner = table.getScanner(scan);
+            for (Result result : scanner) {
+                batch.add(result);
+            }
+            scanner.close();
         }
 
         table.close();
@@ -249,6 +265,9 @@ public class BigTableToCosWriter {
 
     private List<String[]> splitRangeTx() {
         List<String[]> ranges = new ArrayList<>();
+        for (int i = 0; i < THREAD_COUNT; i++) {
+            ranges.add(new String[]{"", ""});
+        }
         return ranges;
     }
 }
