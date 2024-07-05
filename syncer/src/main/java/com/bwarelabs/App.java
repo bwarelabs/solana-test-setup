@@ -12,46 +12,37 @@ import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 public class App {
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) {
     String readSource = null;
-    boolean runChecksumOnHBase = false;
+    String bigtableTable = null;
+    String[] validBigtableTables = {"blocks", "entries", "tx", "tx-by-addr"};
 
-    for (String arg: args) {
+    for (String arg : args) {
       if (arg.startsWith("read-source=")) {
         readSource = arg.split("=")[1];
-      } else if (arg.equals("run-checksum-on-hbase")) {
-        runChecksumOnHBase = true;
+      } else if (readSource != null && readSource.equals("bigtable") && bigtableTable == null) {
+        bigtableTable = arg;
       }
     }
 
-    if ((readSource != null && runChecksumOnHBase) || (readSource == null && !runChecksumOnHBase)) {
-      System.out.println("Error: Specify either 'read-source' or 'run-checksum-on-hbase', but not both.");
-      return;
-    }
-
-    App app = new App();
-
     if (readSource == null) {
-      // the files need to be imported into HDFS before running the
-      // readDataAndCalculateChecksum
-
-      System.out.println("Running checksum calculation on HBase tables.");
-      app.readDataAndCalculateChecksum("blocks");
-      app.readDataAndCalculateChecksum("entries");
-      app.readDataAndCalculateChecksum("tx");
-      app.readDataAndCalculateChecksum("tx-by-addr");
-
-      System.out.println("Done!");
+      System.out.println("Error: 'read-source' argument is required.");
+      System.out.println("Valid values for 'read-source' are 'bigtable' and 'local-files'.");
       return;
     }
 
     if (readSource.equals("bigtable")) {
-      System.out.println("Writing SequenceFiles from Bigtable tables.");
+      if (bigtableTable == null || !Arrays.asList(validBigtableTables).contains(bigtableTable)) {
+        System.out.println("Error: When 'read-source' is 'bigtable', a second argument must be provided with one of the following values: 'blocks', 'entries', 'tx', 'tx-by-addr'.");
+        return;
+      }
+      System.out.println("Writing SequenceFiles from Bigtable table: " + bigtableTable);
       BigTableToCosWriter bigTableToCosWriter = new BigTableToCosWriter();
-      bigTableToCosWriter.write();
+      bigTableToCosWriter.write(bigtableTable);
 
       System.out.println("Done!");
       return;
@@ -70,6 +61,7 @@ public class App {
   }
 
   // Read data from HBase tables and calculate checksum
+  @SuppressWarnings("unused")
   private void readDataAndCalculateChecksum(String tableName) throws IOException {
     System.out.println("Reading data from table: " + tableName);
 

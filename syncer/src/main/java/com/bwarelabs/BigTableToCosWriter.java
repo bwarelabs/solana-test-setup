@@ -51,21 +51,60 @@ public class BigTableToCosWriter {
         loadCheckpoints();
     }
 
-    public void write() {
+    public void write(String tableName) {
         logger.info("Starting BigTable to COS writer");
 
-        List<String[]> hexRanges = splitHexRange();
-        List<String[]> txRanges = splitRangeTx();
+        if (tableName.equals("blocks") || tableName.equals("entries")) {
+            writeBlocksOrEntries(tableName);
+        } else if (tableName.equals("tx")) {
+            writeTx(tableName);
+        } else {
+            logger.severe("Invalid table name");
+        }
 
-        if (hexRanges.size() != THREAD_COUNT || txRanges.size() != THREAD_COUNT) {
+        logger.info("BigTable to COS writer completed");
+    }
+
+    private void writeBlocksOrEntries(String table) {
+        List<String[]> hexRanges = splitHexRange();
+
+        if (hexRanges.size() != THREAD_COUNT ) {
             logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
+        }
+
+        for (int i = 0; i < THREAD_COUNT; i++) {
+            String[] hexRange = hexRanges.get(i);
+
+                String startRow = checkpoints.getOrDefault(i, hexRange[0]);
+                String endRow = hexRange[1];
+
+                logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
+                processTableRange(i, table, startRow, endRow);
+        }
+
+        CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
+        allUploads.join();
+
+        executorService.shutdown();
+        logger.info(String.format("Table '%s' processed and uploaded.", table));
+    }
+
+    private void writeTx(String table) {
+        // todo - remove this if the tx logic can be used at tx-by-addr
+        if ( table.equals("tx") ) {
+            logger.info("Starting BigTable to COS writer for tx table");
+        } else {
+            logger.severe("Invalid table name");
             return;
         }
 
-        // todo - add the rest of the tables
-        List<String> tables = List.of("tx");
-        List<String> startingKeysForTx = new ArrayList<>();
+        List<String[]> txRanges = splitRangeTx();
 
+        if (txRanges.size() != THREAD_COUNT) {
+            logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
+        }
+
+        List<String> startingKeysForTx = new ArrayList<>();
         for (int i = 0; i < THREAD_COUNT; i++) {
             String[] txRange = txRanges.get(i);
             String txStartKey = getThreadStartingKey("tx", txRange[0], txRange[1]);
@@ -75,9 +114,7 @@ public class BigTableToCosWriter {
             logger.info("Starting key for thread " + i + " is " + txStartKey);
         }
 
-
         for (int i = 0; i < THREAD_COUNT; i++) {
-//            String[] hexRange = hexRanges.get(i);
             String[] txRange = txRanges.get(i);
 
             logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
@@ -87,39 +124,27 @@ public class BigTableToCosWriter {
             startingKeysForTx.add(txStartKey);
             logger.info("Starting key for thread " + i + " is " + txStartKey);
 
-            for (String table : tables) {
-                String startRow = checkpoints.getOrDefault(i, table.equals("tx") ? startingKeysForTx.get(i) : hexRanges.get(i)[0]);
-                String endRow = hexRanges.get(i)[1];
+                String startRow = checkpoints.getOrDefault(i, startingKeysForTx.get(i));
+                String endRow = null;
 
-                boolean isCheckpointStart = table.equals("tx") && checkpoints.get(i) != null;
+                boolean isCheckpointStart = checkpoints.get(i) != null;
 
-                if (table.equals("tx")) {
                     if (i == THREAD_COUNT - 1) {
-                        // set the last existing key in the table as the end row
+                        // todo - set the last existing key in the table as the end row
                         endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
                     } else {
                         endRow = startingKeysForTx.get(i + 1);
                     }
-                }
 
                 logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
                 processTableRangeTx(i, table, startRow, endRow, isCheckpointStart);
-            }
-
-//            for (String table : tables) {
-//                String startRow = checkpoints.getOrDefault(i, table.equals("tx") || table.equals("tx-by-addr") ? txRange[0] : hexRange[0]);
-//                String endRow = table.equals("tx") || table.equals("tx-by-addr") ? txRange[1] : hexRange[1];
-//
-//                logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
-////                processTableRange(i, table, startRow, endRow);
-//            }
         }
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
         allUploads.join();
 
         executorService.shutdown();
-        logger.info("All tables processed and uploaded.");
+        logger.info(String.format("Table '%s' processed and uploaded.", table));
     }
 
     private String getThreadStartingKey(String tableName, String prefix, String maxPrefix) {
