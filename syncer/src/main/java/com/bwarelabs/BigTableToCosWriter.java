@@ -56,6 +56,7 @@ public class BigTableToCosWriter {
         List<String[]> hexRanges = splitHexRange();
         List<String[]> txRanges = splitRangeTx();
 
+        // todo - add the rest of the tables
         List<String> tables = List.of("blocks");
 
         for (int i = 0; i < THREAD_COUNT; i++) {
@@ -89,22 +90,26 @@ public class BigTableToCosWriter {
                         String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
                         List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
 
-                        CustomS3FSDataOutputStream customFSDataOutputStream = convertToSequenceFile(tableName, currentStartRow, currentEndRow, batch);
+                        CompletableFuture<Void> uploadFuture = null;
+                        try (CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch)) {
 
-                        final String startRowForLogging = currentStartRow;
-                        final String endRowForLogging = currentEndRow;
-                        System.out.println(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), startRowForLogging, endRowForLogging));
+                            logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
 
-                        CompletableFuture<Void> uploadFuture = customFSDataOutputStream.getUploadFuture()
-                                .thenRun(() -> {
-                                    System.out.println(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-                                });
+                            uploadFuture = customFSDataOutputStream.getUploadFuture()
+                                    .thenRun(() -> {
+                                        logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
+                                    });
+                        } catch (Exception e) {
+                            logger.log(Level.SEVERE, "Error converting batch to sequencefile format", e);
+                            return;
+                        }
 
                         batchFutures.add(uploadFuture);
 
                         currentStartRow = incrementRowKey(currentEndRow);
                     }
 
+                    // Wait for the current batch of futures to complete
                     CompletableFuture<Void> currentBatch = CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
                     currentBatch.join();
 
@@ -155,7 +160,7 @@ public class BigTableToCosWriter {
         return batch;
     }
 
-    private CustomS3FSDataOutputStream convertToSequenceFile(String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
+    private CustomS3FSDataOutputStream convertToSeqAndStartUpload (String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
         logger.info(String.format("[%s] Converting batch to sequencefile format for %s from %s to %s", Thread.currentThread().getName(), tableName, startRowKey, endRowKey));
 
         Configuration hadoopConfig = new Configuration();
@@ -175,6 +180,7 @@ public class BigTableToCosWriter {
             customWriter.append(rowKey, result);
         }
 
+        // starts the writing process, saves a future onto customFSDataOutputStream
         customWriter.close();
 
         return customFSDataOutputStream;
@@ -211,7 +217,6 @@ public class BigTableToCosWriter {
         BigInteger start = new BigInteger("0000000000000000", 16);
         BigInteger end = new BigInteger("0000000000000211", 16);
 
-        // Calculate the size of each interval
         BigInteger totalRange = end.subtract(start).add(BigInteger.ONE); // +1 to include the end in the range
         BigInteger intervalSize = totalRange.divide(BigInteger.valueOf(THREAD_COUNT));
         BigInteger remainder = totalRange.mod(BigInteger.valueOf(THREAD_COUNT));
@@ -243,18 +248,7 @@ public class BigTableToCosWriter {
     }
 
     private List<String[]> splitRangeTx() {
-        // Custom logic to split non-hex keys, e.g., by using the hash or other criteria.
-        // This example assumes keys are split based on their hash values.
         List<String[]> ranges = new ArrayList<>();
-        // Assuming we can get some min and max hash values for tx keys
-        long start = 0; // Replace with actual start if known
-        long end = Long.MAX_VALUE; // Replace with actual end if known
-        long rangeSize = (end - start) / THREAD_COUNT;
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            long rangeStart = start + i * rangeSize;
-            long rangeEnd = (i == THREAD_COUNT - 1) ? end : rangeStart + rangeSize - 1;
-            ranges.add(new String[]{Long.toString(rangeStart), Long.toString(rangeEnd)});
-        }
         return ranges;
     }
 }
