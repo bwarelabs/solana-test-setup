@@ -29,11 +29,13 @@ public class BigTableToCosWriter {
 
     private final Connection connection;
     private final ExecutorService executorService;
-    private static final int THREAD_COUNT = 2;
+    private static final int THREAD_COUNT = 16;
     private static final int SUBRANGE_SIZE = 4; // Number of rows to process in each batch within a thread range
     private static final int BATCH_LIMIT = 5;  // Limit the number of chained batches
     private final List<CompletableFuture<Void>> allUploadFutures = new ArrayList<>();
     private final Map<Integer, String> checkpoints = new HashMap<>();
+
+    private static final char[] CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
 
     public BigTableToCosWriter() {
         try {
@@ -61,19 +63,56 @@ public class BigTableToCosWriter {
         }
 
         // todo - add the rest of the tables
-        List<String> tables = List.of("blocks");
+        List<String> tables = List.of("tx");
+        List<String> startingKeysForTx = new ArrayList<>();
 
         for (int i = 0; i < THREAD_COUNT; i++) {
-            String[] hexRange = hexRanges.get(i);
+            String[] txRange = txRanges.get(i);
+            String txStartKey = getThreadStartingKey("tx", txRange[0], txRange[1]);
+            startingKeysForTx.add(txStartKey);
+
+            logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
+            logger.info("Starting key for thread " + i + " is " + txStartKey);
+        }
+
+
+        for (int i = 0; i < THREAD_COUNT; i++) {
+//            String[] hexRange = hexRanges.get(i);
             String[] txRange = txRanges.get(i);
 
+            logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
+
+            logger.info("Getting starting key for thread " + i);
+            String txStartKey = getThreadStartingKey("tx", txRange[0], txRange[1]);
+            startingKeysForTx.add(txStartKey);
+            logger.info("Starting key for thread " + i + " is " + txStartKey);
+
             for (String table : tables) {
-                String startRow = checkpoints.getOrDefault(i, table.equals("tx") || table.equals("tx-by-addr") ? txRange[0] : hexRange[0]);
-                String endRow = table.equals("tx") || table.equals("tx-by-addr") ? txRange[1] : hexRange[1];
+                String startRow = checkpoints.getOrDefault(i, table.equals("tx") ? startingKeysForTx.get(i) : hexRanges.get(i)[0]);
+                String endRow = hexRanges.get(i)[1];
+
+                boolean isCheckpointStart = table.equals("tx") && checkpoints.get(i) != null;
+
+                if (table.equals("tx")) {
+                    if (i == THREAD_COUNT - 1) {
+                        // set the last existing key in the table as the end row
+                        endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+                    } else {
+                        endRow = startingKeysForTx.get(i + 1);
+                    }
+                }
 
                 logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
-                processTableRange(i, table, startRow, endRow);
+                processTableRangeTx(i, table, startRow, endRow, isCheckpointStart);
             }
+
+//            for (String table : tables) {
+//                String startRow = checkpoints.getOrDefault(i, table.equals("tx") || table.equals("tx-by-addr") ? txRange[0] : hexRange[0]);
+//                String endRow = table.equals("tx") || table.equals("tx-by-addr") ? txRange[1] : hexRange[1];
+//
+//                logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
+////                processTableRange(i, table, startRow, endRow);
+//            }
         }
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
@@ -83,14 +122,109 @@ public class BigTableToCosWriter {
         logger.info("All tables processed and uploaded.");
     }
 
+    private String getThreadStartingKey(String tableName, String prefix, String maxPrefix) {
+        String result = null;
+
+        try {
+            Table table = connection.getTable(TableName.valueOf(tableName));
+
+            // in case there is no key with the prefix, we will try to get the next key
+            // todo! - make sure there is one char in the prefix
+            int prefixValue = prefix.charAt(0);
+            int maxPrefixValue = maxPrefix.charAt(0);
+            for (int i = prefixValue; i <= maxPrefixValue; i++) {
+//                scan by prefix until we find a key using setStartStopRowForPrefixScan
+                Scan scan = new Scan();
+                scan.setStartStopRowForPrefixScan(Bytes.toBytes(String.valueOf((char) i)));
+                scan.setLimit(1);
+                ResultScanner scanner = table.getScanner(scan);
+                Result next = scanner.next();
+                if (next != null) {
+                    result = Bytes.toString(next.getRow());
+                    break;
+                }
+            }
+
+            table.close();
+            return result;
+
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "Error getting starting key for thread", e);
+        }
+
+        return null;
+    }
+
+    private void processTableRangeTx(int threadId, String tableName, String startRowKey, String endRowKey, boolean isCheckpointStart){
+        CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
+            try {
+                String currentStartRow = startRowKey;
+                List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
+                boolean includeStartRow = !isCheckpointStart;
+
+                while (currentStartRow.compareTo(endRowKey) <= 0) {
+                    for (int i = 0; i < BATCH_LIMIT && currentStartRow.compareTo(endRowKey) <= 0; i++) {
+
+                        List<Result> batch = fetchBatchTx(tableName, currentStartRow, endRowKey, includeStartRow);
+                        if (batch.isEmpty()) {
+                            logger.info(String.format("[%s] batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
+                            // the thread has reached the end of his range
+                            currentStartRow =  endRowKey + "Z";
+                            break;
+                        }
+
+                        // since currentStartRow was not included in the scan, the real startRow is the first row in the batch
+                        currentStartRow = Bytes.toString(batch.get(0).getRow());
+                        logger.info(String.format("[%s] batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
+
+                        String currentEndRow = Bytes.toString(batch.get(batch.size() - 1).getRow());
+
+                        CompletableFuture<Void> uploadFuture = null;
+                        try {
+                            CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
+
+                            logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
+
+                            uploadFuture = customFSDataOutputStream.getUploadFuture()
+                                    .thenRun(() -> {
+                                        logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
+                                    });
+                        } catch (Exception e) {
+                            logger.log(Level.SEVERE, "Error converting batch to sequencefile format", e);
+                            return;
+                        }
+
+                        batchFutures.add(uploadFuture);
+
+                        currentStartRow = currentEndRow;
+                        includeStartRow = false;
+                    }
+
+                    // Wait for the current batch of futures to complete
+                    CompletableFuture<Void> currentBatch = CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
+                    currentBatch.join();
+
+                    updateCheckpoint(threadId, currentStartRow);
+
+                    batchFutures.clear();
+                }
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Error processing table range for " + tableName, e.getMessage());
+            }
+        }, executorService);
+
+        allUploadFutures.add(processingFuture);
+    }
+
+
     private void processTableRange(int threadId, String tableName, String startRowKey, String endRowKey) {
         CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
             try {
                 String currentStartRow = startRowKey;
                 List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
 
-                while (compareKeys(currentStartRow, endRowKey) <= 0) {
-                    for (int i = 0; i < BATCH_LIMIT && compareKeys(currentStartRow, endRowKey) <= 0; i++) {
+                while (currentStartRow.compareTo(endRowKey) <= 0) {
+                    for (int i = 0; i < BATCH_LIMIT && currentStartRow.compareTo(endRowKey) <= 0; i++) {
                         String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
                         List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
                         logger.info(String.format("[%s] bath size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, currentEndRow));
@@ -144,10 +278,6 @@ public class BigTableToCosWriter {
         return String.format("%016x", row + 1);
     }
 
-    private int compareKeys(String key1, String key2) {
-        return Long.compareUnsigned(Long.parseUnsignedLong(key1, 16), Long.parseUnsignedLong(key2, 16));
-    }
-
     private List<Result> fetchBatch(String tableName, String startRowKey, String endRowKey) throws IOException {
         Table table = connection.getTable(TableName.valueOf(tableName));
         List<Result> batch = new ArrayList<>();
@@ -164,6 +294,35 @@ public class BigTableToCosWriter {
             scan.withStartRow(Bytes.toBytes(startRowKey));
             scan.withStopRow(Bytes.toBytes(endRowKey));
             scan.setCaching(SUBRANGE_SIZE);
+
+            ResultScanner scanner = table.getScanner(scan);
+            for (Result result : scanner) {
+                batch.add(result);
+            }
+            scanner.close();
+        }
+
+        table.close();
+        return batch;
+    }
+
+    private List<Result> fetchBatchTx(String tableName, String startRowKey, String endRowKey, boolean includeStartRow) throws IOException {
+        Table table = connection.getTable(TableName.valueOf(tableName));
+        List<Result> batch = new ArrayList<>();
+
+        if (startRowKey.equals(endRowKey)) {
+            logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
+            Get get = new Get(Bytes.toBytes(startRowKey));
+            Result result = table.get(get);
+            if (!result.isEmpty()) {
+                batch.add(result);
+            }
+        } else {
+            Scan scan = new Scan();
+            scan.withStartRow(Bytes.toBytes(startRowKey), includeStartRow);
+            scan.withStopRow(Bytes.toBytes(endRowKey), false);
+            scan.setCaching(SUBRANGE_SIZE);
+            scan.setLimit(SUBRANGE_SIZE);
 
             ResultScanner scanner = table.getScanner(scan);
             for (Result result : scanner) {
@@ -263,11 +422,25 @@ public class BigTableToCosWriter {
         return String.format("%016x", value);
     }
 
-    private List<String[]> splitRangeTx() {
-        List<String[]> ranges = new ArrayList<>();
+
+    public static List<String[]> splitRangeTx() {
+        List<String[]> intervals = new ArrayList<>();
+        int totalChars = CHARACTERS.length;
+        int baseIntervalSize = totalChars / THREAD_COUNT;
+        int remainingChars = totalChars % THREAD_COUNT;
+
+        int currentIndex = 0;
         for (int i = 0; i < THREAD_COUNT; i++) {
-            ranges.add(new String[]{"", ""});
+            int intervalSize = baseIntervalSize + (i < remainingChars ? 1 : 0);
+            int endIndex = currentIndex + intervalSize - 1;
+
+            String startKey = String.valueOf(CHARACTERS[currentIndex]);
+            String endKey = String.valueOf(CHARACTERS[endIndex]);
+
+            intervals.add(new String[]{startKey, endKey});
+            currentIndex = endIndex + 1;
         }
-        return ranges;
+
+        return intervals;
     }
 }
