@@ -54,60 +54,52 @@ public class BigTableToCosWriter {
     public void write(String tableName) {
         logger.info("Starting BigTable to COS writer");
 
+        if (tableName == null || tableName.trim().isEmpty()) {
+            logger.severe("Table name cannot be null or empty");
+            return;
+        }
+
         if (tableName.equals("blocks") || tableName.equals("entries")) {
             writeBlocksOrEntries(tableName);
         } else if (tableName.equals("tx") || tableName.equals("tx-by-addr")) {
             writeTx(tableName);
         } else {
-            logger.severe("Invalid table name");
+            logger.severe("Invalid table name: " + tableName);
         }
 
         logger.info("BigTable to COS writer completed");
     }
 
     private void writeBlocksOrEntries(String table) {
-        if (table.equals("blocks") || table.equals("entries")) {
-            logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
-        } else {
-            logger.severe("Invalid table name");
-            return;
-        }
+        logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
         List<String[]> hexRanges = splitHexRange();
-
-        if (hexRanges.size() != THREAD_COUNT ) {
+        if (hexRanges.size() != THREAD_COUNT) {
             logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
+            return;
         }
 
         for (int i = 0; i < THREAD_COUNT; i++) {
             String[] hexRange = hexRanges.get(i);
-
-                String startRow = checkpoints.getOrDefault(i, hexRange[0]);
-                String endRow = hexRange[1];
-
-                logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
-                processTableRange(i, table, startRow, endRow);
+            String startRow = checkpoints.getOrDefault(i, hexRange[0]);
+            String endRow = hexRange[1];
+            logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
+            processTableRange(i, table, startRow, endRow);
         }
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
         allUploads.join();
-
         executorService.shutdown();
         logger.info(String.format("Table '%s' processed and uploaded.", table));
     }
 
     private void writeTx(String table) {
-        if ( table.equals("tx") || table.equals("tx-by-addr")) {
-            logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
-        } else {
-            logger.severe("Invalid table name");
-            return;
-        }
+        logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
         List<String[]> txRanges = splitRangeTx();
-
         if (txRanges.size() != THREAD_COUNT) {
             logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
+            return;
         }
 
         List<String> startingKeysForTx = new ArrayList<>();
@@ -115,17 +107,13 @@ public class BigTableToCosWriter {
             String[] txRange = txRanges.get(i);
             String txStartKey = getThreadStartingKey(table, txRange[0], txRange[1]);
             startingKeysForTx.add(txStartKey);
-
             logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
             logger.info("Starting key for thread " + i + " is " + txStartKey);
         }
 
         for (int i = 0; i < THREAD_COUNT; i++) {
             logger.info("Getting starting key for thread " + i);
-
             String startRow = checkpoints.getOrDefault(i, startingKeysForTx.get(i));
-            String endRow = null;
-
             if (startRow == null) {
                 logger.severe("Starting key is null for thread " + i + " skipping");
                 if (table.equals("tx-by-addr")) {
@@ -137,21 +125,15 @@ public class BigTableToCosWriter {
             }
 
             boolean isCheckpointStart = checkpoints.get(i) != null;
-
-
+            String endRow;
             if (i == THREAD_COUNT - 1) {
-                // todo - set the last existing key in the table as the end row
                 endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
             } else {
                 endRow = startingKeysForTx.get(i + 1);
-
                 if (table.equals("tx-by-addr") && startingKeysForTx.get(i + 1) == null) {
-                    // todo - check daca nu poate sa fie un bug aici
-                    endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzz";
+                    endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzz";
                 }
             }
-
-
 
             logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
             processTableRangeTx(i, table, startRow, endRow, isCheckpointStart);
@@ -159,45 +141,37 @@ public class BigTableToCosWriter {
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
         allUploads.join();
-
         executorService.shutdown();
         logger.info(String.format("Table '%s' processed and uploaded.", table));
     }
 
     private String getThreadStartingKey(String tableName, String prefix, String maxPrefix) {
-        String result = null;
+        if (tableName == null || prefix == null || maxPrefix == null) {
+            logger.severe("Table name, prefix, and maxPrefix cannot be null");
+            return null;
+        }
 
-        try {
-            Table table = connection.getTable(TableName.valueOf(tableName));
-
-            // in case there is no key with the prefix, we will try to get the next key
-            // todo! - make sure there is one char in the prefix
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
             int prefixValue = prefix.charAt(0);
             int maxPrefixValue = maxPrefix.charAt(0);
             for (int i = prefixValue; i <= maxPrefixValue; i++) {
-//                scan by prefix until we find a key using setStartStopRowForPrefixScan
                 Scan scan = new Scan();
                 scan.setStartStopRowForPrefixScan(Bytes.toBytes(String.valueOf((char) i)));
                 scan.setLimit(1);
-                ResultScanner scanner = table.getScanner(scan);
-                Result next = scanner.next();
-                if (next != null) {
-                    result = Bytes.toString(next.getRow());
-                    break;
+                try (ResultScanner scanner = table.getScanner(scan)) {
+                    Result next = scanner.next();
+                    if (next != null) {
+                        return Bytes.toString(next.getRow());
+                    }
                 }
             }
-
-            table.close();
-            return result;
-
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Error getting starting key for thread", e);
         }
-
         return null;
     }
 
-    private void processTableRangeTx(int threadId, String tableName, String startRowKey, String endRowKey, boolean isCheckpointStart){
+    private void processTableRangeTx(int threadId, String tableName, String startRowKey, String endRowKey, boolean isCheckpointStart) {
         CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
             try {
                 String currentStartRow = startRowKey;
@@ -206,48 +180,35 @@ public class BigTableToCosWriter {
 
                 while (currentStartRow.compareTo(endRowKey) <= 0) {
                     for (int i = 0; i < BATCH_LIMIT && currentStartRow.compareTo(endRowKey) <= 0; i++) {
-
                         List<Result> batch = fetchBatchTx(tableName, currentStartRow, endRowKey, includeStartRow);
                         if (batch.isEmpty()) {
-                            logger.info(String.format("[%s] batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
-                            // the thread has reached the end of his range
-                            currentStartRow =  endRowKey + "Z";
+                            logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
+                            currentStartRow = endRowKey + "Z";
                             break;
                         }
 
-                        // since currentStartRow was not included in the scan, the real startRow is the first row in the batch
                         currentStartRow = Bytes.toString(batch.get(0).getRow());
-                        logger.info(String.format("[%s] batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
-
+                        logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
                         String currentEndRow = Bytes.toString(batch.get(batch.size() - 1).getRow());
 
-                        CompletableFuture<Void> uploadFuture = null;
+                        CompletableFuture<Void> uploadFuture;
                         try {
                             CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
-
                             logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
-
-                            uploadFuture = customFSDataOutputStream.getUploadFuture()
-                                    .thenRun(() -> {
-                                        logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-                                    });
+                            uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
                         } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Error converting batch to sequencefile format", e);
+                            logger.log(Level.SEVERE, "Error converting batch to sequence file format", e);
                             return;
                         }
 
                         batchFutures.add(uploadFuture);
-
                         currentStartRow = currentEndRow;
                         includeStartRow = false;
                     }
 
-                    // Wait for the current batch of futures to complete
                     CompletableFuture<Void> currentBatch = CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
                     currentBatch.join();
-
                     updateCheckpoint(threadId, currentStartRow);
-
                     batchFutures.clear();
                 }
             } catch (Exception e) {
@@ -257,7 +218,6 @@ public class BigTableToCosWriter {
 
         allUploadFutures.add(processingFuture);
     }
-
 
     private void processTableRange(int threadId, String tableName, String startRowKey, String endRowKey) {
         CompletableFuture<Void> processingFuture = CompletableFuture.runAsync(() -> {
@@ -269,34 +229,25 @@ public class BigTableToCosWriter {
                     for (int i = 0; i < BATCH_LIMIT && currentStartRow.compareTo(endRowKey) <= 0; i++) {
                         String currentEndRow = calculateEndRow(currentStartRow, endRowKey);
                         List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
-                        logger.info(String.format("[%s] bath size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, currentEndRow));
+                        logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, currentEndRow));
 
-                        CompletableFuture<Void> uploadFuture = null;
+                        CompletableFuture<Void> uploadFuture;
                         try {
                             CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
-
                             logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
-
-                            uploadFuture = customFSDataOutputStream.getUploadFuture()
-                                    .thenRun(() -> {
-                                        logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key()));
-                                    });
+                            uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
                         } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Error converting batch to sequencefile format", e);
+                            logger.log(Level.SEVERE, "Error converting batch to sequence file format", e);
                             return;
                         }
 
                         batchFutures.add(uploadFuture);
-
                         currentStartRow = incrementRowKey(currentEndRow);
                     }
 
-                    // Wait for the current batch of futures to complete
                     CompletableFuture<Void> currentBatch = CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
                     currentBatch.join();
-
                     updateCheckpoint(threadId, currentStartRow);
-
                     batchFutures.clear();
                 }
             } catch (Exception e) {
@@ -321,64 +272,58 @@ public class BigTableToCosWriter {
     }
 
     private List<Result> fetchBatch(String tableName, String startRowKey, String endRowKey) throws IOException {
-        Table table = connection.getTable(TableName.valueOf(tableName));
         List<Result> batch = new ArrayList<>();
-
-        if (startRowKey.equals(endRowKey)) {
-            logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
-            Get get = new Get(Bytes.toBytes(startRowKey));
-            Result result = table.get(get);
-            if (!result.isEmpty()) {
-                batch.add(result);
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
+            if (startRowKey.equals(endRowKey)) {
+                logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
+                Get get = new Get(Bytes.toBytes(startRowKey));
+                Result result = table.get(get);
+                if (!result.isEmpty()) {
+                    batch.add(result);
+                }
+            } else {
+                Scan scan = new Scan();
+                scan.withStartRow(Bytes.toBytes(startRowKey));
+                scan.withStopRow(Bytes.toBytes(endRowKey));
+                scan.setCaching(SUBRANGE_SIZE);
+                try (ResultScanner scanner = table.getScanner(scan)) {
+                    for (Result result : scanner) {
+                        batch.add(result);
+                    }
+                }
             }
-        } else {
-            Scan scan = new Scan();
-            scan.withStartRow(Bytes.toBytes(startRowKey));
-            scan.withStopRow(Bytes.toBytes(endRowKey));
-            scan.setCaching(SUBRANGE_SIZE);
-
-            ResultScanner scanner = table.getScanner(scan);
-            for (Result result : scanner) {
-                batch.add(result);
-            }
-            scanner.close();
         }
-
-        table.close();
         return batch;
     }
 
     private List<Result> fetchBatchTx(String tableName, String startRowKey, String endRowKey, boolean includeStartRow) throws IOException {
-        Table table = connection.getTable(TableName.valueOf(tableName));
         List<Result> batch = new ArrayList<>();
-
-        if (startRowKey.equals(endRowKey)) {
-            logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
-            Get get = new Get(Bytes.toBytes(startRowKey));
-            Result result = table.get(get);
-            if (!result.isEmpty()) {
-                batch.add(result);
+        try (Table table = connection.getTable(TableName.valueOf(tableName))) {
+            if (startRowKey.equals(endRowKey)) {
+                logger.info(String.format("[%s] Fetching single row %s", Thread.currentThread().getName(), startRowKey));
+                Get get = new Get(Bytes.toBytes(startRowKey));
+                Result result = table.get(get);
+                if (!result.isEmpty()) {
+                    batch.add(result);
+                }
+            } else {
+                Scan scan = new Scan();
+                scan.withStartRow(Bytes.toBytes(startRowKey), includeStartRow);
+                scan.withStopRow(Bytes.toBytes(endRowKey), false);
+                scan.setCaching(SUBRANGE_SIZE);
+                scan.setLimit(SUBRANGE_SIZE);
+                try (ResultScanner scanner = table.getScanner(scan)) {
+                    for (Result result : scanner) {
+                        batch.add(result);
+                    }
+                }
             }
-        } else {
-            Scan scan = new Scan();
-            scan.withStartRow(Bytes.toBytes(startRowKey), includeStartRow);
-            scan.withStopRow(Bytes.toBytes(endRowKey), false);
-            scan.setCaching(SUBRANGE_SIZE);
-            scan.setLimit(SUBRANGE_SIZE);
-
-            ResultScanner scanner = table.getScanner(scan);
-            for (Result result : scanner) {
-                batch.add(result);
-            }
-            scanner.close();
         }
-
-        table.close();
         return batch;
     }
 
-    private CustomS3FSDataOutputStream convertToSeqAndStartUpload (String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
-        logger.info(String.format("[%s] Converting batch to sequencefile format for %s from %s to %s", Thread.currentThread().getName(), tableName, startRowKey, endRowKey));
+    private CustomS3FSDataOutputStream convertToSeqAndStartUpload(String tableName, String startRowKey, String endRowKey, List<Result> batch) throws IOException {
+        logger.info(String.format("[%s] Converting batch to sequence file format for %s from %s to %s", Thread.currentThread().getName(), tableName, startRowKey, endRowKey));
 
         Configuration hadoopConfig = new Configuration();
         hadoopConfig.setStrings(
@@ -389,7 +334,7 @@ public class BigTableToCosWriter {
         RawLocalFileSystem fs = new RawLocalFileSystem();
         fs.setConf(hadoopConfig);
 
-        if ( tableName.equals("tx-by-addr") ) {
+        if (tableName.equals("tx-by-addr")) {
             startRowKey = startRowKey.replace("/", "_");
             endRowKey = endRowKey.replace("/", "_");
         }
@@ -402,9 +347,7 @@ public class BigTableToCosWriter {
             customWriter.append(rowKey, result);
         }
 
-        // starts the writing process, saves a future onto customFSDataOutputStream
         customWriter.close();
-
         return customFSDataOutputStream;
     }
 
@@ -448,27 +391,22 @@ public class BigTableToCosWriter {
 
         for (int i = 0; i < THREAD_COUNT; i++) {
             BigInteger currentEnd = currentStart.add(intervalSize).subtract(BigInteger.ONE);
-
             if (remainder.compareTo(BigInteger.ZERO) > 0) {
                 currentEnd = currentEnd.add(BigInteger.ONE);
                 remainder = remainder.subtract(BigInteger.ONE);
             }
-
             intervals.add(new String[]{
                     formatHex(currentStart),
                     formatHex(currentEnd)
             });
-
             currentStart = currentEnd.add(BigInteger.ONE);
         }
-
         return intervals;
     }
 
     private static String formatHex(BigInteger value) {
         return String.format("%016x", value);
     }
-
 
     public static List<String[]> splitRangeTx() {
         List<String[]> intervals = new ArrayList<>();
@@ -480,14 +418,11 @@ public class BigTableToCosWriter {
         for (int i = 0; i < THREAD_COUNT; i++) {
             int intervalSize = baseIntervalSize + (i < remainingChars ? 1 : 0);
             int endIndex = currentIndex + intervalSize - 1;
-
             String startKey = String.valueOf(CHARACTERS[currentIndex]);
             String endKey = String.valueOf(CHARACTERS[endIndex]);
-
             intervals.add(new String[]{startKey, endKey});
             currentIndex = endIndex + 1;
         }
-
         return intervals;
     }
 }
