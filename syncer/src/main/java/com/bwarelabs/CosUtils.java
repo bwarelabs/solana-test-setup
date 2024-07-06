@@ -17,8 +17,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Logger;
 
 public class CosUtils {
+    private static final Logger logger = Logger.getLogger(CosUtils.class.getName());
+
     private static final String BUCKET_NAME = "bwaresolanatest-1322657745";
     private static final String COS_ENDPOINT = "http://cos.ap-chengdu.myqcloud.com";
     private static final String REGION = "ap-chengdu";
@@ -43,19 +46,34 @@ public class CosUtils {
             .build();
 
     public static CompletableFuture<CompletedUpload> uploadToCos(String key, byte[] content) {
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(BUCKET_NAME)
-                .key(key)
-                .build();
+        if (key == null || key.trim().isEmpty()) {
+            logger.severe("Key cannot be null or empty");
+            throw new IllegalArgumentException("Key cannot be null or empty");
+        }
+        if (content == null || content.length == 0) {
+            logger.severe("Content cannot be null or empty");
+            throw new IllegalArgumentException("Content cannot be null or empty");
+        }
 
-        UploadRequest uploadRequest = UploadRequest.builder()
-                .putObjectRequest(putObjectRequest)
-                .requestBody(AsyncRequestBody.fromBytes(content))
-                .addTransferListener(LoggingTransferListener.create())
-                .build();
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(key)
+                    .build();
 
-        Upload upload = transferManager.upload(uploadRequest);
+            UploadRequest uploadRequest = UploadRequest.builder()
+                    .putObjectRequest(putObjectRequest)
+                    .requestBody(AsyncRequestBody.fromBytes(content))
+                    .addTransferListener(LoggingTransferListener.create())
+                    .build();
 
-        return upload.completionFuture();
+            Upload upload = transferManager.upload(uploadRequest);
+
+            return upload.completionFuture().exceptionally(ex -> {
+                throw new RuntimeException("Upload to COS failed", ex);
+            });
+        } catch (Exception e) {
+            throw new RuntimeException("Error initiating upload to COS", e);
+        }
     }
 }
