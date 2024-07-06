@@ -56,7 +56,7 @@ public class BigTableToCosWriter {
 
         if (tableName.equals("blocks") || tableName.equals("entries")) {
             writeBlocksOrEntries(tableName);
-        } else if (tableName.equals("tx")) {
+        } else if (tableName.equals("tx") || tableName.equals("tx-by-addr")) {
             writeTx(tableName);
         } else {
             logger.severe("Invalid table name");
@@ -66,6 +66,13 @@ public class BigTableToCosWriter {
     }
 
     private void writeBlocksOrEntries(String table) {
+        if (table.equals("blocks") || table.equals("entries")) {
+            logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
+        } else {
+            logger.severe("Invalid table name");
+            return;
+        }
+
         List<String[]> hexRanges = splitHexRange();
 
         if (hexRanges.size() != THREAD_COUNT ) {
@@ -90,9 +97,8 @@ public class BigTableToCosWriter {
     }
 
     private void writeTx(String table) {
-        // todo - remove this if the tx logic can be used at tx-by-addr
-        if ( table.equals("tx") ) {
-            logger.info("Starting BigTable to COS writer for tx table");
+        if ( table.equals("tx") || table.equals("tx-by-addr")) {
+            logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
         } else {
             logger.severe("Invalid table name");
             return;
@@ -107,7 +113,7 @@ public class BigTableToCosWriter {
         List<String> startingKeysForTx = new ArrayList<>();
         for (int i = 0; i < THREAD_COUNT; i++) {
             String[] txRange = txRanges.get(i);
-            String txStartKey = getThreadStartingKey("tx", txRange[0], txRange[1]);
+            String txStartKey = getThreadStartingKey(table, txRange[0], txRange[1]);
             startingKeysForTx.add(txStartKey);
 
             logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
@@ -115,29 +121,40 @@ public class BigTableToCosWriter {
         }
 
         for (int i = 0; i < THREAD_COUNT; i++) {
-            String[] txRange = txRanges.get(i);
-
-            logger.info(String.format("Range: %s - %s", txRange[0], txRange[1]));
-
             logger.info("Getting starting key for thread " + i);
-            String txStartKey = getThreadStartingKey("tx", txRange[0], txRange[1]);
-            startingKeysForTx.add(txStartKey);
-            logger.info("Starting key for thread " + i + " is " + txStartKey);
 
-                String startRow = checkpoints.getOrDefault(i, startingKeysForTx.get(i));
-                String endRow = null;
+            String startRow = checkpoints.getOrDefault(i, startingKeysForTx.get(i));
+            String endRow = null;
 
-                boolean isCheckpointStart = checkpoints.get(i) != null;
+            if (startRow == null) {
+                logger.severe("Starting key is null for thread " + i + " skipping");
+                if (table.equals("tx-by-addr")) {
+                    continue;
+                } else {
+                    logger.severe("There should be a starting key for tx table, exiting...");
+                    return;
+                }
+            }
 
-                    if (i == THREAD_COUNT - 1) {
-                        // todo - set the last existing key in the table as the end row
-                        endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
-                    } else {
-                        endRow = startingKeysForTx.get(i + 1);
-                    }
+            boolean isCheckpointStart = checkpoints.get(i) != null;
 
-                logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
-                processTableRangeTx(i, table, startRow, endRow, isCheckpointStart);
+
+            if (i == THREAD_COUNT - 1) {
+                // todo - set the last existing key in the table as the end row
+                endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+            } else {
+                endRow = startingKeysForTx.get(i + 1);
+
+                if (table.equals("tx-by-addr") && startingKeysForTx.get(i + 1) == null) {
+                    // todo - check daca nu poate sa fie un bug aici
+                    endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzz";
+                }
+            }
+
+
+
+            logger.info(String.format("Table: %s, Range: %s - %s", table, startRow, endRow));
+            processTableRangeTx(i, table, startRow, endRow, isCheckpointStart);
         }
 
         CompletableFuture<Void> allUploads = CompletableFuture.allOf(allUploadFutures.toArray(new CompletableFuture[0]));
@@ -234,7 +251,7 @@ public class BigTableToCosWriter {
                     batchFutures.clear();
                 }
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Error processing table range for " + tableName, e.getMessage());
+                logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
             }
         }, executorService);
 
@@ -371,6 +388,11 @@ public class BigTableToCosWriter {
 
         RawLocalFileSystem fs = new RawLocalFileSystem();
         fs.setConf(hadoopConfig);
+
+        if ( tableName.equals("tx-by-addr") ) {
+            startRowKey = startRowKey.replace("/", "_");
+            endRowKey = endRowKey.replace("/", "_");
+        }
         CustomS3FSDataOutputStream customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile/" + tableName + "/range_" + startRowKey + "_" + endRowKey), tableName);
 
         CustomSequenceFileWriter customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream);
