@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
@@ -42,7 +41,7 @@ public class BigTableToCosWriter {
             LogManager.getLogManager().readConfiguration(
                     BigTableToCosWriter.class.getClassLoader().getResourceAsStream("logging.properties"));
         } catch (IOException e) {
-            logger.log(Level.SEVERE, "Could not setup logger configuration", e);
+            logger.severe(String.format("Could not setup logger configuration - %s", e));
         }
 
         Configuration configuration = BigtableConfiguration.configure("emulator", "solana-ledger");
@@ -165,8 +164,8 @@ public class BigTableToCosWriter {
                     }
                 }
             }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Error getting starting key for thread", e);
+        } catch (Exception e) {
+            logger.severe(String.format("Error getting starting key for thread %s - %s", prefix, e));
         }
         return null;
     }
@@ -182,7 +181,8 @@ public class BigTableToCosWriter {
                     for (int i = 0; i < BATCH_LIMIT && currentStartRow.compareTo(endRowKey) <= 0; i++) {
                         List<Result> batch = fetchBatchTx(tableName, currentStartRow, endRowKey, includeStartRow);
                         if (batch.isEmpty()) {
-                            logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
+                            // since we use the last row key as the start row key for the next batch (non-inclusive interval)
+                            // the thread will hit a point where there are no more rows to process so we need to break out of the loop
                             currentStartRow = endRowKey + "Z";
                             break;
                         }
@@ -191,17 +191,9 @@ public class BigTableToCosWriter {
                         logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, endRowKey));
                         String currentEndRow = Bytes.toString(batch.get(batch.size() - 1).getRow());
 
-                        CompletableFuture<Void> uploadFuture;
-                        try {
-                            CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
-                            logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
-                            uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
-                        } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Error converting batch to sequence file format", e);
-                            return;
-                        }
+                        List<CompletableFuture<Void>> tempBatchFutures = getUploadFutures(tableName, currentStartRow, currentEndRow, batch);
+                        batchFutures.addAll(tempBatchFutures);
 
-                        batchFutures.add(uploadFuture);
                         currentStartRow = currentEndRow;
                         includeStartRow = false;
                     }
@@ -231,17 +223,8 @@ public class BigTableToCosWriter {
                         List<Result> batch = fetchBatch(tableName, currentStartRow, currentEndRow);
                         logger.info(String.format("[%s] Batch size: %s for startRow: %s and endRow: %s", Thread.currentThread().getName(), batch.size(), currentStartRow, currentEndRow));
 
-                        CompletableFuture<Void> uploadFuture;
-                        try {
-                            CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
-                            logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
-                            uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
-                        } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Error converting batch to sequence file format", e);
-                            return;
-                        }
-
-                        batchFutures.add(uploadFuture);
+                        List<CompletableFuture<Void>> tempBatchFutures = getUploadFutures(tableName, currentStartRow, currentEndRow, batch);
+                        batchFutures.addAll(tempBatchFutures);
                         currentStartRow = incrementRowKey(currentEndRow);
                     }
 
@@ -251,12 +234,31 @@ public class BigTableToCosWriter {
                     batchFutures.clear();
                 }
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Error processing table range for " + tableName, e);
+                logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
             }
         }, executorService);
 
         allUploadFutures.add(processingFuture);
     }
+
+    private List<CompletableFuture<Void>> getUploadFutures(String tableName, String currentStartRow, String currentEndRow, List<Result> batch) {
+        List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
+
+        CompletableFuture<Void> uploadFuture;
+        try {
+            CustomS3FSDataOutputStream customFSDataOutputStream = convertToSeqAndStartUpload(tableName, currentStartRow, currentEndRow, batch);
+            logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
+            uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
+        } catch (Exception e) {
+            logger.severe(String.format("[%s] Error converting batch to sequence file format for %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
+            return batchFutures;
+        }
+
+        batchFutures.add(uploadFuture);
+
+        return batchFutures;
+    }
+
 
     private String calculateEndRow(String startRow, String endRow) {
         long start = Long.parseUnsignedLong(startRow, 16);
@@ -338,16 +340,23 @@ public class BigTableToCosWriter {
             startRowKey = startRowKey.replace("/", "_");
             endRowKey = endRowKey.replace("/", "_");
         }
+
         CustomS3FSDataOutputStream customFSDataOutputStream = new CustomS3FSDataOutputStream(Paths.get("output/sequencefile/" + tableName + "/range_" + startRowKey + "_" + endRowKey), tableName);
+        CustomSequenceFileWriter customWriter = null;
 
-        CustomSequenceFileWriter customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream);
+        try {
+            customWriter = new CustomSequenceFileWriter(hadoopConfig, customFSDataOutputStream);
 
-        for (Result result : batch) {
-            ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
-            customWriter.append(rowKey, result);
+            for (Result result : batch) {
+                ImmutableBytesWritable rowKey = new ImmutableBytesWritable(result.getRow());
+                customWriter.append(rowKey, result);
+            }
+        } finally {
+            if (customWriter != null) {
+                customWriter.close();
+            }
         }
 
-        customWriter.close();
         return customFSDataOutputStream;
     }
 
@@ -360,7 +369,7 @@ public class BigTableToCosWriter {
         try {
             Files.write(Paths.get("checkpoint_" + threadId + ".txt"), endRowKey.getBytes());
         } catch (IOException e) {
-            logger.log(Level.SEVERE, "Error saving checkpoint for thread " + threadId, e);
+            logger.severe(String.format("Error saving checkpoint for thread %s - %s", threadId, e));
         }
     }
 
@@ -372,7 +381,7 @@ public class BigTableToCosWriter {
                     String checkpoint = new String(Files.readAllBytes(checkpointPath));
                     checkpoints.put(i, checkpoint);
                 } catch (IOException e) {
-                    logger.log(Level.SEVERE, "Error loading checkpoint for thread " + i, e);
+                    logger.severe(String.format("Error loading checkpoint for thread %s - %s", i, e));
                 }
             }
         }

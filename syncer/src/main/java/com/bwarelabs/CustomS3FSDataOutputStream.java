@@ -7,15 +7,18 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Logger;
 
 public class CustomS3FSDataOutputStream extends FSDataOutputStream {
+    private static final Logger logger = Logger.getLogger(CustomS3FSDataOutputStream.class.getName());
+
     private final ByteArrayOutputStream buffer;
     private final String s3Key;
     private CompletableFuture<CompletedUpload> uploadFuture;
 
     public CustomS3FSDataOutputStream(Path slotRangeDir, String category) throws IOException {
         this(new ByteArrayOutputStream(), slotRangeDir, category);
-        System.out.println("CustomS3FSDataOutputStream created for key: " + s3Key);
+        logger.info("CustomS3FSDataOutputStream created for key: " + s3Key);
     }
 
     private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, Path slotRangeDir, String category) {
@@ -26,16 +29,15 @@ public class CustomS3FSDataOutputStream extends FSDataOutputStream {
 
     @Override
     public void close() throws IOException {
-        System.out.println("Closing stream for: " + s3Key);
+        logger.info("Closing stream for: " + s3Key);
         super.close();
         byte[] content = buffer.toByteArray();
-        System.out.println("Uploading " + s3Key + " to S3 asynchronously");
+        logger.info("Uploading " + s3Key + " to S3 asynchronously");
 
         try {
             uploadFuture = CosUtils.uploadToCos(s3Key, content);
         } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("Failed to upload " + s3Key + " to S3");
+            throw new IOException(String.format("Failed to upload %s to S3", s3Key), e);
         } finally {
             buffer.close();
         }
