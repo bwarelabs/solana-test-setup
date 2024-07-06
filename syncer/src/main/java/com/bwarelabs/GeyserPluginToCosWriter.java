@@ -15,9 +15,10 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 
 /**
  * GeyserPluginToCosWriter class is responsible for reading data from local storage, processing it,
@@ -37,9 +38,10 @@ import java.util.stream.Stream;
  *   before the program exits.
  */
 public class GeyserPluginToCosWriter {
+    private static final Logger logger = Logger.getLogger(GeyserPluginToCosWriter.class.getName());
 
     public static void watchDirectory(Path path) {
-        System.out.println("Starting watch process...");
+        logger.info("Starting watch process...");
 
         try {
             // Process existing directories
@@ -49,13 +51,13 @@ public class GeyserPluginToCosWriter {
                     .collect(Collectors.toList());
 
             CompletableFuture<Void> initialUploads = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-            initialUploads.thenRun(() -> System.out.println("Initial slot ranges processed and uploaded."));
+            initialUploads.thenRun(() -> logger.info("Initial slot ranges processed and uploaded."));
 
             // Start watching the directory for new subdirectories
             try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
                 path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
-                System.out.println("Watching directory: " + path);
+                logger.info("Watching directory: " + path);
 
                 while (true) {
                     WatchKey key;
@@ -91,16 +93,16 @@ public class GeyserPluginToCosWriter {
             }
 
             CompletableFuture<Void> allUploads = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-            allUploads.thenRun(() -> System.out.println("All slot ranges processed and uploaded."))
+            allUploads.thenRun(() -> logger.info("All slot ranges processed and uploaded."))
                     .join();
 
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.severe(String.format("Error processing directory: %s, %s", path, e.getMessage()));
         }
     }
 
     private static CompletableFuture<Void> processSlotRange(Path slotRangeDir) {
-        System.out.println("Processing slot range: " + slotRangeDir.getFileName());
+        logger.info("Processing slot range: " + slotRangeDir.getFileName());
 
         Configuration hadoopConfig = new Configuration();
         hadoopConfig.setStrings("io.serializations", WritableSerialization.class.getName(), ResultSerialization.class.getName());
@@ -118,7 +120,7 @@ public class GeyserPluginToCosWriter {
                 CustomS3FSDataOutputStream txByAddrStream = new CustomS3FSDataOutputStream(slotRangeDir, "tx_by_addr");
                 CustomSequenceFileWriter txByAddrWriter = new CustomSequenceFileWriter(hadoopConfig, txByAddrStream);
 
-                Stream<Path>slotDirs = Files.list(slotRangeDir)
+                Stream<Path> slotDirs = Files.list(slotRangeDir)
         ) {
             slotDirs
                     .filter(Files::isDirectory)
@@ -126,8 +128,7 @@ public class GeyserPluginToCosWriter {
                         try {
                             processSlot(slotDir, entriesWriter, blocksWriter, txWriter, txByAddrWriter);
                         } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                            logger.severe(String.format("Error processing slot: %s, %s", slotDir.getFileName(), e.getMessage()));                  }
                     });
 
             // Closing writers so the CustomS3FSDataOutputStream creates the futures
@@ -142,16 +143,16 @@ public class GeyserPluginToCosWriter {
                     txStream.getUploadFuture(),
                     txByAddrStream.getUploadFuture()
             ).thenRun(() -> {
-                System.out.println("Slot range processed: " + slotRangeDir.getFileName());
+                logger.info("Slot range processed: " + slotRangeDir.getFileName());
                 try {
                     deleteDirectory(slotRangeDir);
-                    System.out.println("Deleted slot range: " + slotRangeDir.getFileName());
+                    logger.info("Deleted slot range: " + slotRangeDir.getFileName());
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    logger.severe(String.format("Error deleting slot range: %s, %s", slotRangeDir.getFileName(), e.getMessage()));
                 }
             });
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.severe(String.format("Error processing slot range: %s, %s", slotRangeDir.getFileName(), e.getMessage()));
             return CompletableFuture.completedFuture(null);
         }
     }
@@ -193,7 +194,7 @@ public class GeyserPluginToCosWriter {
                         qualifier = "bin";
                         break;
                     default:
-                        System.out.println("Unknown folder type: " + folderName);
+                        logger.warning("Unknown folder type: " + folderName);
                         return FileVisitResult.CONTINUE;
                 }
 
