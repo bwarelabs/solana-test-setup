@@ -8,15 +8,27 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Result;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Properties;
 import java.util.logging.Logger;
+import java.io.FileInputStream;
 
 public class App {
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
   public static void main(String[] args) {
+
+    Properties properties = new Properties();
+    try (InputStream input = new FileInputStream("config.properties")) { // Specify the path to the external file
+      properties.load(input);
+    } catch (IOException ex) {
+      logger.severe("Error loading configuration file: " + ex.getMessage());
+      return;
+    }
+
     String readSource = null;
     String bigtableTable = null;
     String[] validBigtableTables = {"blocks", "entries", "tx", "tx-by-addr"};
@@ -41,7 +53,7 @@ public class App {
       }
       logger.info("Writing SequenceFiles from Bigtable table: " + bigtableTable);
       try {
-        BigTableToCosWriter bigTableToCosWriter = new BigTableToCosWriter();
+        BigTableToCosWriter bigTableToCosWriter = new BigTableToCosWriter(properties);
         bigTableToCosWriter.write(bigtableTable);
         logger.info("Done!");
       } catch (Exception e) {

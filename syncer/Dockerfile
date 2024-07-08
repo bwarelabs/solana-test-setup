@@ -9,4 +9,5 @@ COPY pom.xml pom.xml
 RUN mvn dependency:resolve
 
 COPY src src
+COPY config.properties config.properties
 RUN mvn package

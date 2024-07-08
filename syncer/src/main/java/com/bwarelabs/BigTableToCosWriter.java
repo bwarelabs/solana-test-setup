@@ -13,36 +13,44 @@ import org.apache.hadoop.io.serializer.WritableSerialization;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
+import java.util.Properties;
 
 public class BigTableToCosWriter {
     private static final Logger logger = Logger.getLogger(BigTableToCosWriter.class.getName());
 
     private final Connection connection;
     private final ExecutorService executorService;
-    private static final int THREAD_COUNT = 16;
-    private static final int SUBRANGE_SIZE = 4; // Number of rows to process in each batch within a thread range
-    private static final int BATCH_LIMIT = 5;  // Limit the number of chained batches
+    private final int THREAD_COUNT;
+    private final int SUBRANGE_SIZE; // Number of rows to process in each batch within a thread range
+    private final int BATCH_LIMIT;  // Limit the number of chained batches
+    private final String TX_LAST_KEY;
+    private final String TX_BY_ADDR_LAST_KEY;
+    private final String HEX_LAST_KEY;
     private final List<CompletableFuture<Void>> allUploadFutures = new ArrayList<>();
     private final Map<Integer, String> checkpoints = new HashMap<>();
 
-    private static final char[] CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
+    private final char[] CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
 
-    public BigTableToCosWriter() throws IOException {
+    public BigTableToCosWriter(Properties properties) throws IOException {
         LogManager.getLogManager().readConfiguration(
                 BigTableToCosWriter.class.getClassLoader().getResourceAsStream("logging.properties"));
 
+        this.THREAD_COUNT = Integer.parseInt(Utils.getRequiredProperty(properties, "bigtable.thread-count"));
+        this.SUBRANGE_SIZE = Integer.parseInt(Utils.getRequiredProperty(properties, "bigtable.subrange-size"));
+        this.BATCH_LIMIT = Integer.parseInt(Utils.getRequiredProperty(properties,"bigtable.batch-limit"));
+        this.TX_LAST_KEY = Utils.getRequiredProperty(properties, "bigtable.tx-last-key");
+        this.TX_BY_ADDR_LAST_KEY = Utils.getRequiredProperty(properties, "bigtable.tx-by-addr-last-key");
+        this.HEX_LAST_KEY = Utils.getRequiredProperty(properties, "bigtable.hex-last-key");
+
         Configuration configuration = BigtableConfiguration.configure("emulator", "solana-ledger");
         connection = BigtableConfiguration.connect(configuration);
-        executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+        executorService = Executors.newFixedThreadPool(this.THREAD_COUNT);
         loadCheckpoints();
     }
 
@@ -68,12 +76,12 @@ public class BigTableToCosWriter {
     private void writeBlocksOrEntries(String table) throws Exception {
         logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
-        List<String[]> hexRanges = splitHexRange();
-        if (hexRanges.size() != THREAD_COUNT) {
+        List<String[]> hexRanges = this.splitHexRange();
+        if (hexRanges.size() != this.THREAD_COUNT) {
             throw new Exception("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
         }
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             String[] hexRange = hexRanges.get(i);
             String startRow = checkpoints.getOrDefault(i, hexRange[0]);
             String endRow = hexRange[1];
@@ -90,13 +98,13 @@ public class BigTableToCosWriter {
     private void writeTx(String table) throws Exception {
         logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
-        List<String[]> txRanges = splitRangeTx();
-        if (txRanges.size() != THREAD_COUNT) {
+        List<String[]> txRanges = this.splitRangeTx();
+        if (txRanges.size() != this.THREAD_COUNT) {
             throw new Exception("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
         }
 
         List<String> startingKeysForTx = new ArrayList<>();
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             String[] txRange = txRanges.get(i);
             String txStartKey = getThreadStartingKey(table, txRange[0], txRange[1]);
             startingKeysForTx.add(txStartKey);
@@ -104,7 +112,7 @@ public class BigTableToCosWriter {
             logger.info("Starting key for thread " + i + " is " + txStartKey);
         }
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             logger.info("Getting starting key for thread " + i);
             String startRow = checkpoints.getOrDefault(i, startingKeysForTx.get(i));
             if (startRow == null) {
@@ -121,13 +129,12 @@ public class BigTableToCosWriter {
 
             boolean isCheckpointStart = checkpoints.get(i) != null;
             String endRow;
-            if (i == THREAD_COUNT - 1) {
-                // todo - replace with the last key in the table
-                endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+            if (i == this.THREAD_COUNT - 1) {
+                endRow = this.TX_LAST_KEY;
             } else {
                 endRow = startingKeysForTx.get(i + 1);
                 if (table.equals("tx-by-addr") && startingKeysForTx.get(i + 1) == null) {
-                    endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzz";
+                    endRow = this.TX_BY_ADDR_LAST_KEY;
                 }
             }
 
@@ -373,7 +380,7 @@ public class BigTableToCosWriter {
     }
 
     private void loadCheckpoints() {
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             Path checkpointPath = Paths.get("checkpoint_" + i + ".txt");
             if (Files.exists(checkpointPath)) {
                 try {
@@ -386,48 +393,48 @@ public class BigTableToCosWriter {
         }
     }
 
-    public static List<String[]> splitHexRange() {
+    public List<String[]> splitHexRange() {
         BigInteger start = new BigInteger("0000000000000000", 16);
-        BigInteger end = new BigInteger("0000000000000211", 16);
+        BigInteger end = new BigInteger(this.HEX_LAST_KEY, 16);
 
         BigInteger totalRange = end.subtract(start).add(BigInteger.ONE); // +1 to include the end in the range
-        BigInteger intervalSize = totalRange.divide(BigInteger.valueOf(THREAD_COUNT));
-        BigInteger remainder = totalRange.mod(BigInteger.valueOf(THREAD_COUNT));
+        BigInteger intervalSize = totalRange.divide(BigInteger.valueOf(this.THREAD_COUNT));
+        BigInteger remainder = totalRange.mod(BigInteger.valueOf(this.THREAD_COUNT));
 
         List<String[]> intervals = new ArrayList<>();
         BigInteger currentStart = start;
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             BigInteger currentEnd = currentStart.add(intervalSize).subtract(BigInteger.ONE);
             if (remainder.compareTo(BigInteger.ZERO) > 0) {
                 currentEnd = currentEnd.add(BigInteger.ONE);
                 remainder = remainder.subtract(BigInteger.ONE);
             }
             intervals.add(new String[]{
-                    formatHex(currentStart),
-                    formatHex(currentEnd)
+                    this.formatHex(currentStart),
+                    this.formatHex(currentEnd)
             });
             currentStart = currentEnd.add(BigInteger.ONE);
         }
         return intervals;
     }
 
-    private static String formatHex(BigInteger value) {
+    private String formatHex(BigInteger value) {
         return String.format("%016x", value);
     }
 
-    public static List<String[]> splitRangeTx() {
+    public List<String[]> splitRangeTx() {
         List<String[]> intervals = new ArrayList<>();
-        int totalChars = CHARACTERS.length;
-        int baseIntervalSize = totalChars / THREAD_COUNT;
-        int remainingChars = totalChars % THREAD_COUNT;
+        int totalChars = this.CHARACTERS.length;
+        int baseIntervalSize = totalChars / this.THREAD_COUNT;
+        int remainingChars = totalChars % this.THREAD_COUNT;
 
         int currentIndex = 0;
-        for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int i = 0; i < this.THREAD_COUNT; i++) {
             int intervalSize = baseIntervalSize + (i < remainingChars ? 1 : 0);
             int endIndex = currentIndex + intervalSize - 1;
-            String startKey = String.valueOf(CHARACTERS[currentIndex]);
-            String endKey = String.valueOf(CHARACTERS[endIndex]);
+            String startKey = String.valueOf(this.CHARACTERS[currentIndex]);
+            String endKey = String.valueOf(this.CHARACTERS[endIndex]);
             intervals.add(new String[]{startKey, endKey});
             currentIndex = endIndex + 1;
         }

@@ -18,15 +18,36 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
+import java.io.InputStream;
+import java.util.Properties;
+import java.io.IOException;
+import java.io.FileInputStream;
 
 public class CosUtils {
     private static final Logger logger = Logger.getLogger(CosUtils.class.getName());
 
-    private static final String BUCKET_NAME = "bwaresolanatest-1322657745";
-    private static final String COS_ENDPOINT = "http://cos.ap-chengdu.myqcloud.com";
-    private static final String REGION = "ap-chengdu";
-    private static final String AWS_ID_KEY = "test";
-    private static final String AWS_SECRET_KEY = "test";
+    private static final String BUCKET_NAME;
+    private static final String COS_ENDPOINT;
+    private static final String REGION;
+    private static final String AWS_ID_KEY;
+    private static final String AWS_SECRET_KEY;
+
+    static {
+        Properties properties = new Properties();
+        try (InputStream input = new FileInputStream("config.properties")) { // Specify the path to the external file
+            properties.load(input);
+        } catch (IOException ex) {
+            logger.severe("Error loading configuration file: " + ex.getMessage());
+            throw new RuntimeException("Error loading configuration file", ex);
+        }
+
+        BUCKET_NAME = Utils.getRequiredProperty(properties, "cos-utils.tencent.buket-name");
+        COS_ENDPOINT = Utils.getRequiredProperty(properties, "cos-utils.tencent.endpoint");
+        REGION = Utils.getRequiredProperty(properties, "cos-utils.tencent.region");
+        AWS_ID_KEY = Utils.getRequiredProperty(properties, "cos-utils.tencent.id-key");
+        AWS_SECRET_KEY = Utils.getRequiredProperty(properties, "cos-utils.tencent.secret-key");
+    }
+
 
     private static final SdkAsyncHttpClient httpClient = NettyNioAsyncHttpClient
             .builder()

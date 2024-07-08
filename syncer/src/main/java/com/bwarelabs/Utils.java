@@ -6,6 +6,7 @@ import org.apache.hadoop.hbase.client.Result;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Properties;
 
 public class Utils {
     public static String calculateSHA256Checksum(Result result) throws NoSuchAlgorithmException, IOException {
@@ -28,5 +29,13 @@ public class Utils {
             hexString.append(hex);
         }
         return hexString.toString();
+    }
+
+    public static String getRequiredProperty(Properties properties, String key) {
+        String value = properties.getProperty(key);
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException("Missing required configuration property: " + key);
+        }
+        return value;
     }
 }
