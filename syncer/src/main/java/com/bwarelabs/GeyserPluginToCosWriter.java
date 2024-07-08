@@ -61,12 +61,7 @@ public class GeyserPluginToCosWriter {
 
                 while (true) {
                     WatchKey key;
-                    try {
-                        key = watchService.take();
-                    } catch (InterruptedException ex) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    }
+                    key = watchService.take();
 
                     for (WatchEvent<?> event : key.pollEvents()) {
                         WatchEvent.Kind<?> kind = event.kind();
@@ -90,6 +85,8 @@ public class GeyserPluginToCosWriter {
                         break;
                     }
                 }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
 
             CompletableFuture<Void> allUploads = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
