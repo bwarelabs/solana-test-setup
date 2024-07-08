@@ -202,6 +202,7 @@ public class BigTableToCosWriter {
                 }
             } catch (Exception e) {
                 logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
+                throw new RuntimeException(e);
             }
         }, executorService);
 
@@ -232,6 +233,7 @@ public class BigTableToCosWriter {
                 }
             } catch (Exception e) {
                 logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
+                throw new RuntimeException(e);
             }
         }, executorService);
 
@@ -247,7 +249,7 @@ public class BigTableToCosWriter {
             logger.info(String.format("[%s] Processing batch %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
             uploadFuture = customFSDataOutputStream.getUploadFuture().thenRun(() -> logger.info(String.format("[%s] Successfully uploaded %s to COS", Thread.currentThread().getName(), customFSDataOutputStream.getS3Key())));
         } catch (Exception e) {
-            logger.severe(String.format("[%s] Error converting batch to sequence file format for %s - %s", Thread.currentThread().getName(), currentStartRow, currentEndRow));
+            logger.severe(String.format("[%s] Error converting batch to sequence file format for %s - %s in table %s", Thread.currentThread().getName(), currentStartRow, currentEndRow, tableName));
             return batchFutures;
         }
 
