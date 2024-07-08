@@ -36,13 +36,9 @@ public class BigTableToCosWriter {
 
     private static final char[] CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
 
-    public BigTableToCosWriter() {
-        try {
-            LogManager.getLogManager().readConfiguration(
-                    BigTableToCosWriter.class.getClassLoader().getResourceAsStream("logging.properties"));
-        } catch (Exception e) {
-            logger.severe(String.format("Could not setup logger configuration - %s", e));
-        }
+    public BigTableToCosWriter() throws IOException {
+        LogManager.getLogManager().readConfiguration(
+                BigTableToCosWriter.class.getClassLoader().getResourceAsStream("logging.properties"));
 
         Configuration configuration = BigtableConfiguration.configure("emulator", "solana-ledger");
         connection = BigtableConfiguration.connect(configuration);
