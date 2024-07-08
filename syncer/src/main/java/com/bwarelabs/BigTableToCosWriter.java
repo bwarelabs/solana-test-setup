@@ -46,7 +46,7 @@ public class BigTableToCosWriter {
         loadCheckpoints();
     }
 
-    public void write(String tableName) {
+    public void write(String tableName) throws Exception {
         logger.info("Starting BigTable to COS writer");
 
         if (tableName == null || tableName.trim().isEmpty()) {
@@ -65,13 +65,12 @@ public class BigTableToCosWriter {
         logger.info("BigTable to COS writer completed");
     }
 
-    private void writeBlocksOrEntries(String table) {
+    private void writeBlocksOrEntries(String table) throws Exception {
         logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
         List<String[]> hexRanges = splitHexRange();
         if (hexRanges.size() != THREAD_COUNT) {
-            logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
-            return;
+            throw new Exception("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
         }
 
         for (int i = 0; i < THREAD_COUNT; i++) {
@@ -88,13 +87,12 @@ public class BigTableToCosWriter {
         logger.info(String.format("Table '%s' processed and uploaded.", table));
     }
 
-    private void writeTx(String table) {
+    private void writeTx(String table) throws Exception {
         logger.info(String.format("Starting BigTable to COS writer for table '%s'", table));
 
         List<String[]> txRanges = splitRangeTx();
         if (txRanges.size() != THREAD_COUNT) {
-            logger.severe("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
-            return;
+            throw new Exception("Invalid number of thread ranges, size must be equal to THREAD_COUNT");
         }
 
         List<String> startingKeysForTx = new ArrayList<>();
@@ -112,16 +110,19 @@ public class BigTableToCosWriter {
             if (startRow == null) {
                 logger.severe("Starting key is null for thread " + i + " skipping");
                 if (table.equals("tx-by-addr")) {
+                    // this can happen if the key distribution is not uniform, I was not able to check this
+                    // in the prod bigtable
                     continue;
                 } else {
-                    logger.severe("There should be a starting key for tx table, exiting...");
-                    return;
+                    // this should not happen because even on local emulator, the keys are pretty uniformly distributed
+                    throw new Exception("There should be a starting key for tx table");
                 }
             }
 
             boolean isCheckpointStart = checkpoints.get(i) != null;
             String endRow;
             if (i == THREAD_COUNT - 1) {
+                // todo - replace with the last key in the table
                 endRow = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
             } else {
                 endRow = startingKeysForTx.get(i + 1);
@@ -142,8 +143,7 @@ public class BigTableToCosWriter {
 
     private String getThreadStartingKey(String tableName, String prefix, String maxPrefix) {
         if (tableName == null || prefix == null || maxPrefix == null) {
-            logger.severe("Table name, prefix, and maxPrefix cannot be null");
-            return null;
+            throw new IllegalArgumentException("Table name, prefix, and maxPrefix cannot be null");
         }
 
         try (Table table = connection.getTable(TableName.valueOf(tableName))) {
@@ -162,6 +162,7 @@ public class BigTableToCosWriter {
             }
         } catch (Exception e) {
             logger.severe(String.format("Error getting starting key for thread %s - %s", prefix, e));
+            throw new RuntimeException(e);
         }
         return null;
     }
