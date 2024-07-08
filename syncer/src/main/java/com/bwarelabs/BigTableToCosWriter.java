@@ -40,7 +40,7 @@ public class BigTableToCosWriter {
         try {
             LogManager.getLogManager().readConfiguration(
                     BigTableToCosWriter.class.getClassLoader().getResourceAsStream("logging.properties"));
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.severe(String.format("Could not setup logger configuration - %s", e));
         }
 
@@ -368,7 +368,7 @@ public class BigTableToCosWriter {
     private void saveCheckpoint(int threadId, String endRowKey) {
         try {
             Files.write(Paths.get("checkpoint_" + threadId + ".txt"), endRowKey.getBytes());
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.severe(String.format("Error saving checkpoint for thread %s - %s", threadId, e));
         }
     }
@@ -380,7 +380,7 @@ public class BigTableToCosWriter {
                 try {
                     String checkpoint = new String(Files.readAllBytes(checkpointPath));
                     checkpoints.put(i, checkpoint);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     logger.severe(String.format("Error loading checkpoint for thread %s - %s", i, e));
                 }
             }

@@ -9,10 +9,8 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Result;
 
 import java.nio.file.Path;
-import java.security.NoSuchAlgorithmException;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class App {
@@ -84,7 +82,7 @@ public class App {
           String checksum = null;
           try {
             checksum = Utils.calculateSHA256Checksum(result);
-          } catch (NoSuchAlgorithmException | IOException e) {
+          } catch (Exception e) {
             logger.severe(String.format("Error calculating checksum for row %d: %s", numberOfRows, e));
           }
           numberOfRows++;
@@ -92,7 +90,7 @@ public class App {
         }
       }
       logger.info("Number of rows read: " + numberOfRows);
-    } catch (IOException e) {
+    } catch (Exception e) {
       logger.severe(String.format("Error reading data from table: %s - %s", tableName, e));
       throw e;
     }

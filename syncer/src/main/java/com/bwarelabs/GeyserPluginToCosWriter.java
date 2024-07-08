@@ -15,7 +15,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -93,7 +92,7 @@ public class GeyserPluginToCosWriter {
             allUploads.thenRun(() -> logger.info("All slot ranges processed and uploaded."))
                     .join();
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.severe(String.format("Error processing directory: %s, %s", path, e.getMessage()));
         }
     }
@@ -124,7 +123,7 @@ public class GeyserPluginToCosWriter {
                     .forEach(slotDir -> {
                         try {
                             processSlot(slotDir, entriesWriter, blocksWriter, txWriter, txByAddrWriter);
-                        } catch (IOException e) {
+                        } catch (Exception e) {
                             logger.severe(String.format("Error processing slot: %s, %s", slotDir.getFileName(), e.getMessage()));                  }
                     });
 
@@ -144,11 +143,11 @@ public class GeyserPluginToCosWriter {
                 try {
                     deleteDirectory(slotRangeDir);
                     logger.info("Deleted slot range: " + slotRangeDir.getFileName());
-                } catch (IOException e) {
+                } catch (Exception e) {
                     logger.severe(String.format("Error deleting slot range: %s, %s", slotRangeDir.getFileName(), e.getMessage()));
                 }
             });
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.severe(String.format("Error processing slot range: %s, %s", slotRangeDir.getFileName(), e.getMessage()));
             return CompletableFuture.completedFuture(null);
         }

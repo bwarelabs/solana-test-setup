@@ -16,7 +16,7 @@ public class CustomS3FSDataOutputStream extends FSDataOutputStream {
     private final String s3Key;
     private CompletableFuture<CompletedUpload> uploadFuture;
 
-    public CustomS3FSDataOutputStream(Path slotRangeDir, String category) throws IOException {
+    public CustomS3FSDataOutputStream(Path slotRangeDir, String category) {
         this(new ByteArrayOutputStream(), slotRangeDir, category);
         logger.info("CustomS3FSDataOutputStream created for key: " + s3Key);
     }
