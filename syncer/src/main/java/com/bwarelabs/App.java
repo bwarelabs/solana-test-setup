@@ -22,7 +22,7 @@ public class App {
   public static void main(String[] args) {
 
     Properties properties = new Properties();
-    try (InputStream input = new FileInputStream("config.properties")) { // Specify the path to the external file
+    try (InputStream input = new FileInputStream("config.properties")) { 
       properties.load(input);
     } catch (IOException ex) {
       logger.severe("Error loading configuration file: " + ex.getMessage());
