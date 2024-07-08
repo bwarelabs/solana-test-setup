@@ -43,7 +43,7 @@ public class CustomSequenceFileWriter implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        System.out.println("Closing custom sequence file writer");
+        logger.info("Closing custom sequence file writer");
         this.writer.close();
 
         if (fsDataOutputStream != null) {
