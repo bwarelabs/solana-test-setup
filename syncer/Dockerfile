@@ -1,12 +1,15 @@
-FROM eclipse-temurin:17
+FROM rust:latest as builder
 
-RUN apt-get update
-RUN apt-get install -y maven
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN mkdir app
-WORKDIR app
-COPY pom.xml pom.xml
+RUN apt-get update && \
+    apt-get install -y wget curl gnupg software-properties-common lsb-release clang libclang-dev maven
+
+WORKDIR /usr/workspace/
+RUN git clone "https://github.com/bwarelabs/solana-syncer.git"
+
+WORKDIR /usr/workspace/solana-syncer
+
 RUN mvn dependency:resolve
 
-COPY src src
 RUN mvn package
