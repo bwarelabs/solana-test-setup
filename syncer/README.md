@@ -16,4 +16,4 @@ This folder contains a Docker-based setup for the Syncer service. The syncer rea
 This container uses the following environment variables:
 1. **BIGTABLE_EMULATOR_HOST**: Points to the BigTable emulator service for integration.
 
-PS: there is a new version in progress on branch SOL-18 which watches the data written by the geyser plugin and uploads it directly in COS, and a new class that writes data from bigtable and writes to COS for the initial sync, but we still test the code, it will reach main soon.
+PS: there is a new version in progress on https://github.com/bwarelabs/solana-syncer on branch PR-todos which watches the data written by the geyser plugin and uploads it directly in COS, and a new class that writes data from bigtable and writes to COS for the initial sync, but we still test the code, it will reach main soon.
