@@ -58,7 +58,7 @@ ENV PATH "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
 
 # Pull down HBase and build it into /root/hbase-bin.
 WORKDIR /root
-ARG BRANCH_OR_TAG=master
+ARG BRANCH_OR_TAG=rel/2.6.0
 RUN git clone --depth 1 -b ${BRANCH_OR_TAG} https://github.com/apache/hbase.git \
   && \
   mvn -T1C clean install -DskipTests assembly:single -f ./hbase/pom.xml \
