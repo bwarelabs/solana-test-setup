@@ -11,6 +11,9 @@ This repository contains a Docker-based setup for a Solana test environment inte
 
 The setup is ideal for development and testing of migration Solana from Google BigTable to HBase. Cheack each service's folder for more information.
 
+# Requirements
+- Docker Compose V2
+
 # Usage
 ## There are multiple setups in this repository:
 1. **Solana Node writing to HBase instead of BigTable**
