@@ -22,7 +22,7 @@ public class Utils {
 
         byte[] hashBytes = digest.digest();
         StringBuilder hexString = new StringBuilder();
-        for (byte hashByte: hashBytes) {
+        for (byte hashByte : hashBytes) {
             String hex = Integer.toHexString(0xff & hashByte);
             if (hex.length() == 1)
                 hexString.append('0');
