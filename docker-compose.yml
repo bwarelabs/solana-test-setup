@@ -43,8 +43,6 @@ services:
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
     command: sleep 3600
-    ports:
-      - "9090:9090"
     volumes:
       - ./output/sequencefile:/output/sequencefile
       - ../solana-cos-plugin/workspace/storage:/input/storage
