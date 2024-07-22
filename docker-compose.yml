@@ -40,8 +40,8 @@ services:
     build:
       dockerfile: Dockerfile
       context: ./syncer
-    environment:
-      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    #environment:
+      #BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
     command: sleep 3600
     volumes:
       - ./output/sequencefile:/output/sequencefile
