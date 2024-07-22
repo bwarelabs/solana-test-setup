@@ -28,6 +28,6 @@ The setup is ideal for development and testing of migration Solana from Google B
 
 ## Setup 3: Syncer migrating data from BigTable to Tencent Cloud Storage in sequencefiles format
 1. You will need tencent cloud storage credentials and a few configs depending on the data you want to migrate. Check `config.properties` for the required properties.
-2. Make sure you have data in BigTable. If not, you can generate some data by running the Solana Test Validator and the BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose).
+2. Make sure you have data in BigTable. If not, you can generate some data by running the Solana Test Validator and the BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose). Make sure you comment `this.configuration.set(BigtableOptionsFactory.BIGTABLE_SERVICE_ACCOUNT_JSON_KEYFILE_LOCATION_KEY, pathToCredentials);` code from `src/main/java/com/bwarelabs/BigTableToCosWriter.java` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
 3. Start the Syncer service using `docker compose up syncer --build`. The Syncer will read data from BigTable and write it to Tencent Cloud Storage in sequencefiles format. Check the Syncer's readme for more information.
 4. Check `cos-cli` documentation for more information on how to interact with Tencent Cloud Storage.
