@@ -24,7 +24,7 @@ public class CustomS3FSDataOutputStream extends FSDataOutputStream {
     private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, Path slotRangeDir, String category) {
         super(buffer, null);
         this.buffer = buffer;
-        this.s3Key = slotRangeDir.getFileName() + "/" + category + "/" + category + ".seq";
+        this.s3Key = category + "/" + slotRangeDir.getFileName() + "/" + category + ".seq";
     }
 
     @Override

@@ -8,7 +8,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -22,9 +22,6 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.Properties;
@@ -208,14 +205,22 @@ public class BigTableToCosWriter {
     }
 
     private void runTaskOnWorkerThread(int threadId, String tableName, String startRowKey, String endRowKey,
-            boolean isCheckpointStart) {
+                                       boolean isCheckpointStart) {
         CompletableFuture<Void> processingFuture = CompletableFuture
-                .supplyAsync(() -> splitRangeAndChainUploads(threadId, tableName, startRowKey, endRowKey,
-                        !isCheckpointStart, new BatchCounter(), new ArrayList<>())
-                        .exceptionally(e -> {
-                            logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
-                            throw new RuntimeException(e);
-                        }), executorService)
+                .supplyAsync(() -> {
+                    long startTime = System.currentTimeMillis();
+                    CompletableFuture<Void> future = splitRangeAndChainUploads(threadId, tableName, startRowKey, endRowKey,
+                            !isCheckpointStart, new BatchCounter(), new ArrayList<>())
+                            .exceptionally(e -> {
+                                logger.severe(String.format("Error processing table range for %s - %s", tableName, e));
+                                throw new RuntimeException(e);
+                            });
+                    future.thenRun(() -> {
+                        long endTime = System.currentTimeMillis();
+                        logger.info(String.format("Task %d completed in %d ms", threadId, (endTime - startTime)));
+                    });
+                    return future;
+                }, executorService)
                 .thenCompose(batchFuture -> batchFuture);
 
         allUploadFutures.add(processingFuture);

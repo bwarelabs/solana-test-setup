@@ -20,7 +20,6 @@ public class App {
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
   public static void main(String[] args) {
-
     Properties properties = new Properties();
     try (InputStream input = new FileInputStream("config.properties")) { 
       properties.load(input);

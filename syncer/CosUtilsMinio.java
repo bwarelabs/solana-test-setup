@@ -13,6 +13,9 @@ import software.amazon.awssdk.transfer.s3.model.Upload;
 import software.amazon.awssdk.transfer.s3.model.UploadRequest;
 import software.amazon.awssdk.transfer.s3.progress.LoggingTransferListener;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.endpoints.S3EndpointProvider;
+import software.amazon.awssdk.services.s3.endpoints.S3EndpointParams;
+import software.amazon.awssdk.endpoints.Endpoint;
 
 import java.net.URI;
 import java.time.Duration;
@@ -69,7 +72,14 @@ public class CosUtils {
 
     private static final S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
             .httpClient(httpClient)
-//            .endpointOverride(URI.create(COS_ENDPOINT))
+	    .endpointProvider(new S3EndpointProvider() {
+                        @Override
+                        public CompletableFuture<Endpoint> resolveEndpoint(S3EndpointParams endpointParams) {
+                            return CompletableFuture.completedFuture(Endpoint.builder()
+                                    .url(URI.create(COS_ENDPOINT + "/" + endpointParams.bucket()))
+                                    .build());
+                        }
+                    })
             .region(Region.of(REGION))
             .credentialsProvider(
                     StaticCredentialsProvider.create(AwsBasicCredentials.create(AWS_ID_KEY, AWS_SECRET_KEY)))
