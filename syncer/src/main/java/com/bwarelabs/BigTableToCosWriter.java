@@ -449,11 +449,17 @@ public class BigTableToCosWriter {
         BigInteger currentStart = start;
 
         for (int i = 0; i < this.THREAD_COUNT; i++) {
+            currentStart = currentStart.divide(BigInteger.valueOf(this.SUBRANGE_SIZE)).multiply(BigInteger.valueOf(this.SUBRANGE_SIZE));
+
             BigInteger currentEnd = currentStart.add(intervalSize).subtract(BigInteger.ONE);
+
             if (remainder.compareTo(BigInteger.ZERO) > 0) {
                 currentEnd = currentEnd.add(BigInteger.ONE);
                 remainder = remainder.subtract(BigInteger.ONE);
             }
+
+            currentEnd = currentEnd.divide(BigInteger.valueOf(this.SUBRANGE_SIZE)).multiply(BigInteger.valueOf(this.SUBRANGE_SIZE)).add(BigInteger.valueOf(this.SUBRANGE_SIZE - 1));
+
             intervals.add(new String[] {
                     this.formatHex(currentStart),
                     this.formatHex(currentEnd)
