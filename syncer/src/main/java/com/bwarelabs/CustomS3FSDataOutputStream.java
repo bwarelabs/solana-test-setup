@@ -1,41 +1,42 @@
 package com.bwarelabs;
 
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 public class CustomS3FSDataOutputStream extends FSDataOutputStream {
     private static final Logger logger = Logger.getLogger(CustomS3FSDataOutputStream.class.getName());
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(CustomS3FSDataOutputStream.class);
 
-    private final ByteArrayOutputStream buffer;
+    private final PipedOutputStream pipedOutputStream;
+    private final PipedInputStream pipedInputStream;
     private final String s3Key;
     private CompletableFuture<CompletedUpload> uploadFuture;
 
-    public CustomS3FSDataOutputStream(Path slotRangeDir, String category) {
-        this(new ByteArrayOutputStream(), slotRangeDir, category);
+    public CustomS3FSDataOutputStream(Path slotRangeDir, String category) throws IOException {
+        this(new PipedOutputStream(), slotRangeDir, category);
         logger.info("CustomS3FSDataOutputStream created for key: " + s3Key);
     }
 
-    private CustomS3FSDataOutputStream(ByteArrayOutputStream buffer, Path slotRangeDir, String category) {
-        super(buffer, null);
-        this.buffer = buffer;
+    private CustomS3FSDataOutputStream(PipedOutputStream pipedOutputStream, Path slotRangeDir, String category) throws IOException {
+        super(pipedOutputStream, null);
+        this.pipedOutputStream = pipedOutputStream;
+        this.pipedInputStream = new PipedInputStream(pipedOutputStream);
         this.s3Key = category + "/" + slotRangeDir.getFileName() + "/" + category + ".seq";
+        initiateUpload();
     }
 
-    @Override
-    public void close() throws IOException {
-        logger.info("Closing stream for: " + s3Key);
-        super.close();
-        byte[] content = buffer.toByteArray();
-        logger.info("Uploading " + s3Key + " to S3 asynchronously");
-
+    private void initiateUpload() {
+        logger.info(String.format("Initiating upload for: %s", s3Key));
         try {
-            uploadFuture = CosUtils.uploadToCos(s3Key, content);
+            uploadFuture = CosUtils.uploadToCos(s3Key, pipedInputStream);
 
             uploadFuture.exceptionally(ex -> {
                 logger.severe(String.format("Failed to upload %s to S3", s3Key));
@@ -43,12 +44,18 @@ public class CustomS3FSDataOutputStream extends FSDataOutputStream {
                 return null;
             });
         } catch (Exception e) {
-            throw new IOException(String.format("Failed to upload %s to S3", s3Key), e);
-        } finally {
-            buffer.close();
+            logger.severe(String.format("Failed to initiate upload %s to S3", s3Key));
+            e.printStackTrace();
         }
     }
 
+    @Override
+    public void close() throws IOException {
+        logger.info("Closing stream for: " + s3Key);
+        super.close();
+        pipedOutputStream.close();
+        pipedInputStream.close();
+    }
 
     public CompletableFuture<CompletedUpload> getUploadFuture() {
         return uploadFuture;

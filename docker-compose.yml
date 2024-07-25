@@ -37,15 +37,17 @@ services:
       - ./input:/input
 
   syncer:
+#    image: solana-syncer
     build:
       dockerfile: Dockerfile
       context: ./syncer
-    #environment:
-      #BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    # environment:
+    #   BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+#    command: java -Xmx256g --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable blocks
     command: sleep 3600
     volumes:
       - ./output/sequencefile:/output/sequencefile
-      - ../solana-cos-plugin/workspace/storage:/input/storage
+      - /data:/data
     depends_on:
       - bigtable-emulator
 

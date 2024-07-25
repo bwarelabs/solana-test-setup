@@ -12,6 +12,10 @@ This folder contains a Docker-based setup for the Syncer service. The syncer rea
 `java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=local-files`  
 `java --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar run-checksum-on-hbase`
 
+
+java -Xmx128g --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable blocks
+
+
 * it writes each data into `./output/sequencefiles/{table_name}` directory
 
 ## Environment Variables
