@@ -36,18 +36,39 @@ services:
       - ./output:/output
       - ./input:/input
 
-  syncer:
-#    image: solana-syncer
-    build:
-      dockerfile: Dockerfile
-      context: ./syncer
+  syncer-blocks:
+    image: solana-syncer
+      #build:
+      #  dockerfile: Dockerfile
+      #  context: ./syncer
     # environment:
     #   BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
-#    command: java -Xmx256g --add-opens=java.base/java.nio=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable blocks
-    command: sleep 3600
+    command: java -Xmx256g --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable blocks
+      #command: sleep 3600
     volumes:
       - ./output/sequencefile:/output/sequencefile
       - /data:/data
+      - ./config.properties:/app/config.properties
+      - ./solana-tencent-e042e478aa66.json:/app/solana-tencent-e042e478aa66.json
+      - ./checkpoints/blocks:/app/checkpoints/blocks
+    depends_on:
+      - bigtable-emulator
+
+  syncer-entries:
+    image: solana-syncer
+      #build:
+      #  dockerfile: Dockerfile
+      #  context: ./syncer
+    # environment:
+    #   BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    command: java -Xmx256g --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED -jar target/syncer-1.0-SNAPSHOT.jar read-source=bigtable entries
+      #command: sleep 3600
+    volumes:
+      - ./output/sequencefile:/output/sequencefile
+      - /data:/data
+      - ./config.properties:/app/config.properties
+      - ./solana-tencent-e042e478aa66.json:/app/solana-tencent-e042e478aa66.json
+      - ./checkpoints/entries:/app/checkpoints/entries
     depends_on:
       - bigtable-emulator
 
