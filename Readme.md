@@ -22,9 +22,8 @@ The setup is ideal for development and testing of migration Solana from Google B
 
 ## Setup 1: Solana Node writing to HBase instead of BigTable
 1. Make sure you have hbase and adapter services running. You can use `docker compose up hbase --build` and `docker compose up adapter --build` to start them.
-2. Create the required tables in HBase `blocks`, `entries`, `tx`, `tx-by-addr`. Check HBase's readme for more information.
-3. Run the Solana Test Validator using docker compose as well, but make sure that the `BIGTABLE_EMULATOR_HOST` environment variable is set to `solana-bigtable-hbase-adapter:50051` (see docker-compose).
-4. The Solana Test Validator will now write data to HBase instead of BigTable. You can use the Solana Lite RPC to query the data or exec into the HBase container to run HBase shell commands.
+2. Run the Solana Test Validator using docker compose as well, but make sure that the `BIGTABLE_EMULATOR_HOST` environment variable is set to `solana-bigtable-hbase-adapter:50051` (see docker-compose).
+3. The Solana Test Validator will now write data to HBase instead of BigTable. You can use the Solana Lite RPC to query the data or exec into the HBase container to run HBase shell commands.
 
 ## Setup 3: Syncer migrating data from BigTable to Tencent Cloud Storage in sequencefiles format
 1. You will need tencent cloud storage credentials and a few configs depending on the data you want to migrate. Check `config.properties` for the required properties.

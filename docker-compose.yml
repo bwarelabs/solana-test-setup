@@ -35,6 +35,11 @@ services:
     volumes:
       - ./output:/output
       - ./input:/input
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "curl -f http://localhost:16010/master-status && test -f /root/table.tx-by-addr"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   syncer:
     build:
