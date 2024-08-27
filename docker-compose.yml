@@ -10,15 +10,18 @@ services:
 
   validator:
     build:
-      dockerfile: validator/Dockerfile
+      context: ./validator
+      dockerfile: Dockerfile
     environment:
+      #  IMPORTANT: Choose between bigtable-emulator or solana-bigtable-hbase-adapter, depending on your setup
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       # BIGTABLE_EMULATOR_HOST: solana-bigtable-hbase-adapter:50051
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
     depends_on:
+      #  IMPORTANT: Add / remove the following dependencies depending on your setup
       - bigtable-emulator
-      - hbase
-      - solana-bigtable-hbase-adapter
+      # - hbase
+      # - solana-bigtable-hbase-adapter
 
   hbase:
     build:
@@ -33,25 +36,64 @@ services:
     stdin_open: true
     tty: true
     volumes:
-      - ./output:/output
       - ./input:/input
+
+  syncer-bigtable:
+    image: solana-syncer
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - ./syncer/config.properties:/app/config.properties
+      - ./syncer/solana-tencent-e042e478aa66.json:/app/solana-tencent-e042e478aa66.json
+    environment:
+      JVM_ARGS: "-Xmx26g"
+    command: read-source=bigtable
+    # environment:
+      # BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    # depends_on:
+      #- bigtable-emulator
+
+  syncer-local-files:
+    image: solana-syncer
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - /data:/data
+      - ./syncer/config.properties:/app/config.properties
+    command: read-source=local-files
+    # environment:
+     # BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    # depends_on:
+     # - bigtable-emulator
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "/bin/bash", "-c", "curl -f http://localhost:16010/master-status && test -f /root/table.tx-by-addr"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
-      retries: 5
-
-  syncer:
-    build:
-      dockerfile: Dockerfile
-      context: ./syncer
-    environment:
-      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
-    command: sleep 3600
-    volumes:
-      - ./output/sequencefile:/output/sequencefile
+      retries: 3
+      start_period: 10s
+  minio-bucket-setup:
+    image: minio/mc:latest
     depends_on:
-      - bigtable-emulator
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin123) do sleep 5; done;
+      /usr/bin/mc mb myminio/mybucket;
+      /usr/bin/mc policy set public myminio/mybucket;
+      exit 0;
+      "
 
   solana-lite-rpc:
     build:
