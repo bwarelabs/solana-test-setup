@@ -6,6 +6,10 @@ The Solana Test Setup is a comprehensive Docker-based environment designed for d
 
 The environment includes a range of services, from a BigTable emulator to a Solana test validator, Syncer, and HBase, all orchestrated through Docker Compose. This setup is ideal for developing and testing the migration of Solana's massive dataset, ensuring that the blockchain can operate seamlessly across different storage platforms. Whether you're working on syncing historical data, handling real-time transactions, or querying blockchain data, the Solana Test Setup provides a flexible and powerful toolset to support your needs.
 
+## Architecture
+![Solana Syncer Architecture](https://github.com/bwarelabs/solana-test-setup/blob/cleanup/solana-syncing-architecture.png?raw=true)
+
+
 ## Services Overview
 
 1. **BigTable Emulator**:
