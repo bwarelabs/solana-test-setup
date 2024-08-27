@@ -75,7 +75,9 @@ The environment includes a range of services, from a BigTable emulator to a Sola
            ```bash
            docker compose up syncer-local-files --build
            ```
-        3. The Syncer will read local files and upload them to Tencent Cloud Storage.
+        3. The Syncer will read local files and upload them to Tencent Cloud Storage.  
+           **IMPORTANT**: When running the Syncer in local mode, you need to have the both Solana node and [Solana Cos Plugin](https://github.com/bwarelabs/solana-cos-plugin) running and producing data to the local directory specified in the `config.properties` file.
+
 
 3. **Syncer migrating data from BigTable Emulator to Tencent Cloud Storage in sequencefiles format (for production, use real credentials)**  
     - **Steps**:
