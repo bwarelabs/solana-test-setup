@@ -1,6 +1,10 @@
 # Solana Test Environment with Google BigTable Emulator
 
-This repository contains a Docker-based setup for a Solana test environment integrated with a Google BigTable emulator. The environment includes 8 main services:
+## Project Overview
+
+The Solana Test Setup is a comprehensive Docker-based environment designed for developers and engineers working with the Solana blockchain. This project enables the simulation, testing, and migration of Solana's data from Google BigTable to alternative storage solutions, such as Tencent Cloud Storage and HBase, without relying on Google Cloud infrastructure.
+
+The environment includes a range of services, from a BigTable emulator to a Solana test validator, Syncer, and HBase, all orchestrated through Docker Compose. This setup is ideal for developing and testing the migration of Solana's massive dataset, ensuring that the blockchain can operate seamlessly across different storage platforms. Whether you're working on syncing historical data, handling real-time transactions, or querying blockchain data, the Solana Test Setup provides a flexible and powerful toolset to support your needs.
 
 ## Services Overview
 
