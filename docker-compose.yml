@@ -6,7 +6,7 @@ services:
       - "8086:8086"
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
-      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/bigtable-service-account-key.json"
 
   validator:
     build:
@@ -16,7 +16,7 @@ services:
       #  IMPORTANT: Choose between bigtable-emulator or solana-bigtable-hbase-adapter, depending on your setup
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       # BIGTABLE_EMULATOR_HOST: solana-bigtable-hbase-adapter:50051
-      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/solana-data-migration-1b9caa70b7cc.json"
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/bigtable-service-account-key.json"
     depends_on:
       #  IMPORTANT: Add / remove the following dependencies depending on your setup
       - bigtable-emulator
@@ -45,7 +45,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./syncer/config.properties:/app/config.properties
-      - ./syncer/solana-tencent-e042e478aa66.json:/app/solana-tencent-e042e478aa66.json
+      - ./syncer/bigtable-service-account-key.json:/app/bigtable-service-account-key.json
     environment:
       JVM_ARGS: "-Xmx26g"
     command: read-source=bigtable
