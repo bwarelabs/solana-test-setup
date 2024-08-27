@@ -46,10 +46,10 @@ services:
     volumes:
       - ./syncer/config.properties:/app/config.properties
       - ./syncer/bigtable-service-account-key.json:/app/bigtable-service-account-key.json
-    command: read-source=bigtable use-emulator=true
+    command: read-source=bigtable # use-emulator=true
     environment:
       JVM_ARGS: "-Xmx26g"
-      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      # BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
     # depends_on:
       #- bigtable-emulator
 
