@@ -79,7 +79,17 @@ This repository contains a Docker-based setup for a Solana test environment inte
            ```
         3. The Syncer will read local files and upload them to Tencent Cloud Storage.
 
-3. **Syncer migrating data from BigTable to Tencent Cloud Storage in sequencefiles format**
+3. **Syncer migrating data from BigTable to Tencent Cloud Storage in sequencefiles format**  
+   Make sure you have data in BigTable. If not, you can generate some data by running the Solana Test Validator and the BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose). Make sure you comment  
+   ```bash  
+   String pathToCredentials = Utils.getRequiredProperty(properties, "bigtable.credentials");
+   ````
+   code from
+   ```bash
+   src/main/java/com/bwarelabs/BigTableToCosWriter.java
+   ```
+   and change `bigtable.project-id=mainnet-beta` to `bigtable.project-id=emulator` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
+
     - **Steps**:
         1. Ensure your `config.properties` is updated with Tencent Cloud Storage credentials.
         2. If using the BigTable Emulator, make sure you have data in BigTable. If not, generate some by running the Solana Test Validator and BigTable Emulator:
