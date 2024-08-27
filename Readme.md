@@ -44,16 +44,6 @@ The environment includes a range of services, from a BigTable emulator to a Sola
     - **Start Command**: `docker compose up solana-bigtable-hbase-adapter --build`
     - **Environment Variable**: Set `HBASE_HOST` to `hbase:9090`.
 
-7. **MinIO**:
-    - A high-performance, S3-compatible object storage service that can be used as an alternative storage for testing.
-    - **Ports**: `9000`, `9001`
-    - **Start Command**: `docker compose up minio --build`
-    - **Healthcheck**: Configured to ensure the service is running properly.
-
-8. **MinIO Bucket Setup**:
-    - Sets up the MinIO bucket and applies public access policies.
-    - **Start Command**: `docker compose up minio-bucket-setup`
-
 ## Requirements
 - Docker Compose V2
 
@@ -88,9 +78,6 @@ The environment includes a range of services, from a BigTable emulator to a Sola
         3. The Syncer will read local files and upload them to Tencent Cloud Storage.
 
 3. **Syncer migrating data from BigTable Emulator to Tencent Cloud Storage in sequencefiles format (for production, use real credentials)**  
-   Make sure you have data in BigTable. If not, you can generate some data by running the Solana Test Validator and the BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose). 
-   and change `bigtable.project-id=test` to `bigtable.project-id=emulator` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
-
     - **Steps**:
         1. Ensure your `config.properties` is updated with Tencent Cloud Storage credentials.
         2. If using the BigTable Emulator, make sure you have data in BigTable. If not, generate some by running the Solana Test Validator and BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose).
@@ -98,15 +85,8 @@ The environment includes a range of services, from a BigTable emulator to a Sola
            docker compose up bigtable-emulator --build
            docker compose up validator --build
            ```
-        3. Make sure you comment
-           ```bash  
-           String pathToCredentials = Utils.getRequiredProperty(properties, "bigtable.credentials");
-           ```
-           code from
-           ```bash
-           src/main/java/com/bwarelabs/BigTableToCosWriter.java
-           ```
-        4. Change `bigtable.project-id=test` to `bigtable.project-id=emulator` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
+        3. Make sure you add `use-emulator=true` argument to the docker's command in `docker-compose.yml` if you are using the BigTable emulator. `command: read-source=bigtable use-emulator=true`
+        4. Change `bigtable.project-id=test` to `bigtable.project-id=emulator`, and `bigtable.instance-id=test` to `bigtable.instance-id=solana-ledger` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
         5. Start the Syncer service with the `read-source=bigtable` command:
            ```bash
            docker compose up syncer-bigtable --build
