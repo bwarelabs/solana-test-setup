@@ -23,8 +23,8 @@ if [ ! -f table.tx-by-addr ]; then
   touch table.tx-by-addr
 fi
 if [ ! -f table.tx_full ]; then
-  echo "create 'tx-by-block', 'x'" | hbase shell
-  touch table.tx-by-block
+  echo "create 'tx_full', 'x'" | hbase shell
+  touch table.tx_full
 fi
 echo 'Tables created successfully'
 

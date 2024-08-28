@@ -3,7 +3,7 @@ FROM rust:1.80.1-bookworm as rust-builder
 
 WORKDIR /usr/workspace
 
-RUN git clone "https://github.com/bwarelabs/solana-syncer.git" -b "cleanup"
+RUN git clone "https://github.com/bwarelabs/solana-syncer.git"
 
 WORKDIR /usr/workspace/solana-syncer/solana-bigtable
 
