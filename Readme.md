@@ -81,6 +81,6 @@ The environment includes a range of services, from a BigTable emulator to a Sola
         3. When using the BigTable Emulator, make sure you have data in BigTable. If not, generate some by running the Solana Test Validator and BigTable Emulator. 
            Run  
            ```bash
-           docker compose -f docker-compose.syncer-from-bigtable-to-COS.yml up syncer-bigtable-using-emulator -d --build
+           docker compose -f docker-compose.syncer-from-bigtable-to-COS.yml up -d --build
            ```
         4. The Syncer will migrate data from BigTable Emulator to Tencent Cloud Storage in sequencefiles format.
