@@ -1,0 +1,43 @@
+services:
+  bigtable-emulator:
+    build:
+      context: ./bigtable-emulator
+    ports:
+      - "8086:8086"
+    environment:
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/bigtable-service-account-key.json"
+
+  validator:
+    build:
+      context: ./validator
+      dockerfile: Dockerfile
+    environment:
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+      GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/bigtable-service-account-key.json"
+    depends_on:
+      - bigtable-emulator
+
+  syncer-bigtable-using-emulator:
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - ./syncer/config.properties:/app/config.properties
+    command: read-source=bigtable use-emulator=true
+    environment:
+      JVM_ARGS: "-Xmx26g"
+      BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
+    depends_on:
+      - bigtable-emulator
+
+  syncer-bigtable:
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - ./syncer/config.properties:/app/config.properties
+      - ./syncer/bigtable-service-account-key.json:/app/bigtable-service-account-key.json
+    command: read-source=bigtable
+    environment:
+      JVM_ARGS: "-Xmx26g"

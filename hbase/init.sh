@@ -28,4 +28,6 @@ if [ ! -f table.tx_full ]; then
 fi
 echo 'Tables created successfully'
 
+touch /tmp/hbase_ready
+
 wait

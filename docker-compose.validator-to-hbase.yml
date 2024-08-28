@@ -1,0 +1,55 @@
+services:
+  hbase:
+    build:
+      context: ./hbase
+      dockerfile: Dockerfile
+    ports:
+      - "16010:16010"
+      - "16020:16020"
+      - "16030:16030"
+      - "2181:2181"
+      - "9090:9090"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./input:/input
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/hbase_ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  solana-bigtable-hbase-adapter:
+    build:
+      context: ./solana-bigtable-hbase-adapter
+      dockerfile: Dockerfile
+    environment:
+      HBASE_HOST: hbase:9090
+    ports:
+      - "50051:50051"
+    depends_on:
+      - hbase
+
+  validator:
+    build:
+      context: ./validator
+      dockerfile: Dockerfile
+    environment:
+      BIGTABLE_EMULATOR_HOST: solana-bigtable-hbase-adapter:50051
+    depends_on:
+      hbase:
+        condition: service_healthy
+      solana-bigtable-hbase-adapter:
+        condition: service_started
+
+  solana-lite-rpc:
+    build:
+      context: ./solana-lite-rpc
+      dockerfile: Dockerfile
+    ports:
+      - "8899:8899"
+      - "8900:8900"
+    depends_on:
+      - hbase
+

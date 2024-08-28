@@ -53,44 +53,39 @@ The environment includes a range of services, from a BigTable emulator to a Sola
 
 1. **Solana Node writing to HBase instead of BigTable**
     - **Steps**:
-        1. Make sure that the `BIGTABLE_EMULATOR_HOST: solana-bigtable-hbase-adapter:50051` environment variable is set in the `docker-compose.yml` file for `validator` service
-        2. Start the HBase and Adapter services:
+        1. This setup uses `docker-compose.validator-to-hbase.yml` file.
+        2. Run:
            ```bash
-           docker compose up hbase --build
-           docker compose up solana-bigtable-hbase-adapter --build
+           docker compose -f ./docker-compose.validator-to-hbase.yml up -d --build
            ```
-        3. Run the Solana Test Validator with the appropriate `BIGTABLE_EMULATOR_HOST` environment variable:
+         3. The Solana Test Validator will now write data to HBase instead of BigTable. Use the Solana Lite RPC to query the data or exec into the HBase container to run HBase shell commands:
            ```bash
-           docker compose up validator --build
-           ```
-        4. The Solana Test Validator will now write data to HBase instead of BigTable. Use the Solana Lite RPC to query the data or exec into the HBase container to run HBase shell commands:
-           ```bash
-           docker compose exec hbase /bin/bash
+           docker compose -f ./docker-compose.validator-to-hbase.yml exec hbase /bin/bash
+           docker compose -f ./docker-compose.validator-to-hbase.yml exec solana-lite-rpc /bin/bash 
            ```
 
-2. **Syncer reading files written by [GeyserPlugin](https://github.com/bwarelabs/solana-cos-plugin) to Tencent Cloud Storage in sequencefiles format**
+2. **[Syncer](https://github.com/bwarelabs/solana-syncer) reading files written by [Solana Cos Plugin](https://github.com/bwarelabs/solana-cos-plugin) to Tencent Cloud Storage in sequencefiles format**
     - **Steps**:
         1. Update `config.properties` with Tencent Cloud Storage credentials.
-        2. Start the Syncer service with the `read-source=local-files` command:
+        2. **IMPORTANT**: When running the Syncer in local mode, you need to have the both Solana node and [Solana Cos Plugin](https://github.com/bwarelabs/solana-cos-plugin) running and producing data to the local directory specified in the `config.properties` file. By default, the local directory in which the Syncer will look for files and where the Solana Cos Plugin will write the data is `/data`.
+        3. Start the Syncer service with the `read-source=local-files` command:
            ```bash
-           docker compose up syncer-local-files --build
+           docker compose -f docker-compose.syncer-from-geyser-plugin-to-COS.yml up -d --build
            ```
-        3. The Syncer will read local files and upload them to Tencent Cloud Storage.  
-           **IMPORTANT**: When running the Syncer in local mode, you need to have the both Solana node and [Solana Cos Plugin](https://github.com/bwarelabs/solana-cos-plugin) running and producing data to the local directory specified in the `config.properties` file. By default, the local directory in which the Syncer will look for files and where the Solana Cos Plugin will write the data is `/data`.
-
+        4. The Syncer will read local files and upload them to Tencent Cloud Storage.  
 
 3. **Syncer migrating data from BigTable Emulator to Tencent Cloud Storage in sequencefiles format (for production, use real credentials)**  
     - **Steps**:
         1. Ensure your `config.properties` is updated with Tencent Cloud Storage credentials.
-        2. If using the BigTable Emulator, make sure you have data in BigTable. If not, generate some by running the Solana Test Validator and BigTable Emulator. The `BIGTABLE_EMULATOR_HOST` environment variable should be set to `bigtable-emulator:8086` (see docker-compose).
+        2. Change `bigtable.project-id=test` to `bigtable.project-id=emulator`, and `bigtable.instance-id=test` to `bigtable.instance-id=solana-ledger` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
+        3. If using the BigTable Emulator, make sure you have data in BigTable. If not, generate some by running the Solana Test Validator and BigTable Emulator. 
+           Run  
            ```bash
-           docker compose up bigtable-emulator --build
-           docker compose up validator --build
+           docker compose -f docker-compose.syncer-from-bigtable-to-COS.yml up syncer-bigtable-using-emulator -d --build
            ```
-        3. Make sure you add `use-emulator=true` argument to the docker's command in `docker-compose.yml` if you are using the BigTable emulator. `command: read-source=bigtable use-emulator=true`
-        4. Change `bigtable.project-id=test` to `bigtable.project-id=emulator`, and `bigtable.instance-id=test` to `bigtable.instance-id=solana-ledger` if you want to use the bigtable emulator as data source instead of a real BigTable instance.
-        5. Start the Syncer service with the `read-source=bigtable` command:
+        4. If using real BigTable.
+           Run  
            ```bash
-           docker compose up syncer-bigtable --build
+           docker compose -f docker-compose.syncer-from-bigtable-to-COS.yml up syncer-bigtable -d --build
            ```
-        6. The Syncer will migrate data from BigTable to Tencent Cloud Storage in sequencefiles format.
+        5. The Syncer will migrate data from BigTable to Tencent Cloud Storage in sequencefiles format.

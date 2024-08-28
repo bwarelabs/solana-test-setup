@@ -1,0 +1,9 @@
+services:
+  syncer-local-files:
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - /data:/data
+      - ./syncer/config.properties:/app/config.properties
+    command: read-source=local-files
