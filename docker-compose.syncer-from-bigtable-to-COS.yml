@@ -11,7 +11,7 @@ services:
   validator:
     build:
       context: ./validator
-      dockerfile: Dockerfile
+      dockerfile: BigtableUpload.Dockerfile
     environment:
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
       GOOGLE_APPLICATION_CREDENTIALS: "/usr/local/bin/bigtable-service-account-key.json"

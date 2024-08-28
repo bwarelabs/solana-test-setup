@@ -7,3 +7,12 @@ services:
       - /data:/data
       - ./syncer/config.properties:/app/config.properties
     command: read-source=local-files
+    depends_on:
+      - validator-with-geyser-plugin
+
+  validator-with-geyser-plugin:
+    build:
+      context: ./validator
+      dockerfile: GeyserPlugin.Dockerfile
+    volumes:
+      - /data:/data

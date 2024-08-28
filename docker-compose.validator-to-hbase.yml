@@ -34,7 +34,7 @@ services:
   validator:
     build:
       context: ./validator
-      dockerfile: Dockerfile
+      dockerfile: BigtableUpload.Dockerfile
     environment:
       BIGTABLE_EMULATOR_HOST: solana-bigtable-hbase-adapter:50051
     depends_on:
