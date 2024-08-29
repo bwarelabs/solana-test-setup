@@ -7,7 +7,7 @@ RUN apt-get update && \
 
 WORKDIR /usr/workspace/
 
-RUN git clone "https://github.com/bwarelabs/agave.git"
+RUN git clone "https://github.com/agave/agave.git"
 
 WORKDIR /usr/workspace/agave/validator
 RUN cargo build --release

@@ -9,7 +9,7 @@ RUN apt-get update && \
 
 WORKDIR /home/admin
 
-RUN git clone "https://github.com/bwarelabs/agave.git"
+RUN git clone --depth 1 --single-branch --branch v1.18.22 "https://github.com/anza-xyz/agave.git"
 
 WORKDIR /home/admin/agave/validator
 RUN cargo build --release
@@ -30,5 +30,4 @@ COPY config.json /usr/local/bin/config.json
 RUN apt-get update && \
     apt-get install -y bzip2 vim
 
-#ENTRYPOINT ["/usr/local/bin/solana-test-validator", "--geyser-plugin-config", "/usr/local/bin/config.json", "--enable-bigtable-ledger-upload"]
-CMD ["sleep", "infinity"]
+ENTRYPOINT ["/usr/local/bin/solana-test-validator", "--geyser-plugin-config", "/usr/local/bin/config.json"]
