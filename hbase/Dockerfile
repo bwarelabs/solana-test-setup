@@ -32,6 +32,11 @@ RUN xmlstarlet ed -L \
   -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.zookeeper.property.clientPortAddress" \
   -s "/configuration/property[last()]" -t elem -n "value" -v "0.0.0.0" \
   /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.server.keyvalue.maxsize" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "104857600" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
 
 COPY init.sh /home/admin/init.sh
 CMD ["/bin/bash", "init.sh"]
