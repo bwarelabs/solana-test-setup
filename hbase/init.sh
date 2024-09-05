@@ -22,6 +22,12 @@ if [ ! -f table.tx-by-addr ]; then
   echo "create 'tx-by-addr', 'x'" | hbase shell
   touch table.tx-by-addr
 fi
+if [ ! -f table.tx_full ]; then
+  echo "create 'tx_full', 'x'" | hbase shell
+  touch table.tx_full
+fi
 echo 'Tables created successfully'
+
+touch /tmp/hbase_ready
 
 wait

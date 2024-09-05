@@ -1,0 +1,6 @@
+{
+  "libpath": "/usr/local/lib/libsolana_cos_plugin.so",
+  "workspace": "/data/workspace",
+  "slot_range": 100,
+  "commit_slot_delay": 50
+}

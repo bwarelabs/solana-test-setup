@@ -9,7 +9,7 @@ RUN git clone "https://github.com/bwarelabs/agave.git"
 
 RUN chmod +x /usr/workspace/agave/storage-bigtable/init-bigtable.sh
 
-COPY solana-data-migration-1b9caa70b7cc.json /usr/local/bin/solana-data-migration-1b9caa70b7cc.json
+COPY bigtable-service-account-key.json /usr/local/bin/bigtable-service-account-key.json
 COPY start-bigtable.sh /usr/local/bin/start-bigtable.sh
 
 RUN chmod +x /usr/local/bin/start-bigtable.sh
