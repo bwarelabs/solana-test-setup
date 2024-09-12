@@ -37,6 +37,26 @@ RUN xmlstarlet ed -L \
   -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.server.keyvalue.maxsize" \
   -s "/configuration/property[last()]" -t elem -n "value" -v "104857600" \
   /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.hregion.max.filesize" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "1610612736" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.hregion.memstore.block.multiplier" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "4" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.hregion.memstore.flush.size" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "134217728" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.hstore.blockingStoreFiles" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "200" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
 
 COPY init.sh /home/admin/init.sh
 CMD ["/bin/bash", "init.sh"]
