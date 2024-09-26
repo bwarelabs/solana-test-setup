@@ -1,0 +1,62 @@
+services:
+  syncer:
+    build:
+      context: ./syncer
+      dockerfile: Dockerfile
+    volumes:
+      - ./syncer/config.properties:/app/config.properties
+    command: read-source=cos start-key=000000000000c350 end-key=000000000001869f
+    environment:
+      - HBASE_HOST=hbase
+      - HBASE_PORT=16000
+      - JVM_ARGS=-Xmx26g
+    depends_on:
+      hbase:
+        condition: service_healthy
+    networks:
+      - hbase_network
+
+  hbase:
+    build:
+      context: ./hbase
+      dockerfile: Dockerfile
+    ports:
+      - "16010:16010"
+      - "16020:16020"
+      - "16030:16030"
+      - "9090:9090"
+      - "2181:2181"
+    stdin_open: true
+    tty: true
+    volumes:
+      - hbase_data:/hbase
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/hbase_ready"]
+      interval: 20s
+      timeout: 30s
+      retries: 5
+      start_period: 20s
+    networks:
+      - hbase_network
+
+  solana-lite-rpc:
+    build:
+      context: ./solana-lite-rpc
+      dockerfile: Dockerfile
+    ports:
+      - "8899:8899"
+      - "8900:8900"
+    environment:
+      - HBASE_HOST=hbase
+      - HBASE_PORT=16000
+    depends_on:
+      - hbase
+    networks:
+      - hbase_network
+
+volumes:
+  hbase_data:
+
+networks:
+  hbase_network:
+    driver: bridge

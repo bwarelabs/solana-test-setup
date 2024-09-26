@@ -54,6 +54,21 @@ RUN xmlstarlet ed -L \
   /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
 RUN xmlstarlet ed -L \
   -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.zookeeper.property.maxClientCnxns" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "300" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "zookeeper.session.timeout" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "1200" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.client.operation.timeout" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "1200" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
   -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.hstore.blockingStoreFiles" \
   -s "/configuration/property[last()]" -t elem -n "value" -v "200" \
   /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
