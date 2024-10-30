@@ -20,7 +20,7 @@ WORKDIR /home/admin
 USER admin
 
 # HBase setup
-ARG HBASE_VERSION=2.6.0
+ARG HBASE_VERSION=2.6.1
 RUN wget https://dlcdn.apache.org/hbase/${HBASE_VERSION}/hbase-${HBASE_VERSION}-bin.tar.gz \
   && tar -xzvf hbase-${HBASE_VERSION}-bin.tar.gz \
   && rm hbase-${HBASE_VERSION}-bin.tar.gz
@@ -35,7 +35,12 @@ RUN xmlstarlet ed -L \
 RUN xmlstarlet ed -L \
   -s "/configuration" -t elem -n "property" -v "" \
   -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.server.keyvalue.maxsize" \
-  -s "/configuration/property[last()]" -t elem -n "value" -v "104857600" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "268435456" \
+  /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
+RUN xmlstarlet ed -L \
+  -s "/configuration" -t elem -n "property" -v "" \
+  -s "/configuration/property[last()]" -t elem -n "name" -v "hbase.client.keyvalue.maxsize" \
+  -s "/configuration/property[last()]" -t elem -n "value" -v "268435456" \
   /home/admin/hbase-${HBASE_VERSION}/conf/hbase-site.xml
 RUN xmlstarlet ed -L \
   -s "/configuration" -t elem -n "property" -v "" \
