@@ -5,6 +5,9 @@ hbase thrift start -p 9090 &
 echo 'Waiting for HBase to be up...'
 while ! echo 'status' | hbase shell &>/dev/null; do sleep 5; done
 
+# 'create blocks' fails because some things are not ready yet, so sleep for a bit
+sleep 10
+
 echo 'Creating tables...'
 if [ ! -f table.blocks ]; then
   echo "create 'blocks', 'x'" | hbase shell
