@@ -3,7 +3,7 @@ FROM google/cloud-sdk:latest
 WORKDIR /usr/workspace/
 
 RUN apt-get update && \
-    apt-get install -y netcat
+    apt-get install -y netcat-traditional
 
 RUN git clone "https://github.com/bwarelabs/agave.git"
 

@@ -3,7 +3,7 @@ FROM rust:latest as builder
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y wget curl gnupg software-properties-common lsb-release protobuf-compiler clang libclang-dev
+    apt-get install -y wget curl gnupg software-properties-common lsb-release protobuf-compiler clang libclang-dev libudev-dev
 
 WORKDIR /usr/workspace/
 

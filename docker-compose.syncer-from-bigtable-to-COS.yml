@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./syncer/config.properties:/app/config.properties
-    command: read-source=bigtable use-emulator=true
+    command: bigtable-to-cos --use-emulator=true --start-key=0 --end-key=1000
     environment:
       JVM_ARGS: "-Xmx26g"
       BIGTABLE_EMULATOR_HOST: bigtable-emulator:8086
